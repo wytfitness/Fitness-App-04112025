@@ -1,0 +1,37 @@
+// lib/theme.js
+export const colors = {
+  // Neutrals
+  bg: "#F6FAF7",        // page background (very light green tint)
+  surface: "#F8FAFC",   // light surface (slate-50)
+  card: "#FFFFFF",      // card background
+  text: "#0F172A",      // slate-900
+  textMuted: "#64748B", // slate-500/600
+  border: "#E2E8F0",    // slate-200
+
+  // Brand / accents
+  primary: "#16A34A",   // green-600 (CTA, active)
+  onPrimary: "#FFFFFF",
+  info: "#2563EB",      // blue-600
+  success: "#10B981",   // emerald-500
+  warning: "#F59E0B",   // amber-500
+  danger: "#EF4444",    // red-500
+  purple: "#A855F7",    // violet-500
+  orange: "#F97316",    // orange-500
+
+  // Macros (for rings/labels)
+  kcal: "#F97316",      // orange
+  protein: "#2563EB",   // blue
+  carbs: "#10B981",     // green
+  fats: "#A855F7",      // purple
+};
+
+export const radius = { md: 14, lg: 20, xl: 24 };
+export const spacing = (n) => n * 8;
+
+export const shadow = {
+  shadowColor: "#000",
+  shadowOpacity: 0.06,
+  shadowOffset: { width: 0, height: 6 },
+  shadowRadius: 12,
+  elevation: 6,
+};

@@ -1,0 +1,141 @@
+// app/(tabs)/index.js
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors, spacing } from "../../lib/theme";
+import Card from "../../components/Card";
+import Button from "../../components/Button";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { api } from "../../lib/api";
+
+const nf = new Intl.NumberFormat();
+
+const Metric = ({ title, value, right }) => (
+  <Card style={{ flex: 1 }}>
+    <Text style={s.cardTitle}>{title}</Text>
+    <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 6 }}>
+      <Text style={s.big}>{value}</Text>
+      {right ? <Text style={s.right}>{right}</Text> : null}
+    </View>
+  </Card>
+);
+
+export default function Dashboard() {
+  const router = useRouter();
+
+  const [totals, setTotals] = useState({ kcal: 0, p: 0, c: 0, f: 0 });
+  const CAL_GOAL = 2200; // tweak or load from profile later
+
+  const loadDashboard = useCallback(async () => {
+    // pull today's meals and flatten items
+    const { meals } = await api.mealsToday();
+    const items = meals?.flatMap((m) => m.meal_items ?? []) ?? [];
+    const t = items.reduce(
+      (acc, it) => {
+        acc.kcal += it.calories ?? 0;
+        acc.p += it.protein_g ?? 0;
+        acc.c += it.carbs_g ?? 0;
+        acc.f += it.fat_g ?? 0;
+        return acc;
+      },
+      { kcal: 0, p: 0, c: 0, f: 0 }
+    );
+    setTotals(t);
+  }, []);
+
+  // 🔁 reload when returning from modals (Add Food / Add Weight)
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
+
+  return (
+    <SafeAreaView style={s.wrap} edges={["top"]}>
+      <View style={s.headerRow}>
+        <Text style={s.hTitle}>Dashboard</Text>
+        <TouchableOpacity
+          onPress={() => router.push("/settings")}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ padding: 4 }}
+        >
+          <Ionicons name="settings-outline" size={20} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={s.section}>Today</Text>
+
+      <View style={s.grid2}>
+        <Metric
+          title="Calories In/Out"
+          value={nf.format(Math.round(totals.kcal))}
+          right={` / ${nf.format(CAL_GOAL)}`}
+        />
+        <Metric
+          title="Macro Rings"
+          value={`P ${Math.round(totals.p)}  C ${Math.round(totals.c)}  F ${Math.round(
+            totals.f
+          )}`}
+        />
+      </View>
+
+      <View style={s.grid2}>
+        <Metric title="Steps / HR" value="5,200" right=" / 72 bpm" />
+        <Metric title="Last Workout" value="Leg Day" />
+      </View>
+
+      <Text style={s.section}>Actions</Text>
+
+      <View style={s.grid2}>
+        {/* open the modal; it will auto-create a 'snack' meal if none passed */}
+        <Button
+          title="🍽  Log Food"
+          onPress={() => router.push("/(models)/add-food")}
+          style={s.actionBtn}
+        />
+        <Button
+          title="🏋️  Start Gym"
+          onPress={() => router.push("/workout/select-routine")}
+          style={s.actionBtn}
+        />
+      </View>
+
+      <View style={s.grid2}>
+        <Button
+          title="💧  Add Water"
+          onPress={() => router.push("/add-water")}
+          style={s.actionBtn}
+        />
+        <Button
+          title="⚖️  Add Weight"
+          onPress={() => router.push("/(models)/add-weight")}
+          style={s.actionBtn}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing(2),
+    paddingBottom: spacing(2),
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing(1),
+  },
+  hTitle: { color: colors.text, fontWeight: "700", fontSize: 20 },
+  section: { color: colors.textMuted, marginTop: spacing(1), marginBottom: 4 },
+  grid2: { flexDirection: "row", gap: spacing(1.25), marginTop: spacing(1) },
+  cardTitle: { color: colors.textMuted, fontSize: 12 },
+  big: { color: colors.text, fontSize: 24, fontWeight: "800" },
+  right: { color: colors.textMuted, fontSize: 16, marginLeft: 6, marginBottom: 2 },
+  actionBtn: { flex: 1, height: 56 },
+});

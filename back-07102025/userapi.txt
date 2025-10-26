@@ -1,0 +1,190 @@
+// index.ts (user-api)
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+function withCORS(handler) {
+  return async (req)=>{
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "authorization, content-type"
+        }
+      });
+    }
+    const res = await handler(req);
+    const headers = new Headers(res.headers);
+    headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    headers.set("Access-Control-Allow-Headers", "authorization, content-type");
+    return new Response(await res.text(), {
+      status: res.status,
+      headers
+    });
+  };
+}
+function bad(msg, code = 400) {
+  return Response.json({
+    error: msg
+  }, {
+    status: code
+  });
+}
+async function getUserId(supabase) {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) throw new Error("Unauthorized");
+  return user.id;
+}
+export const handler = withCORS(async (req)=>{
+  const url = new URL(req.url);
+  const action = url.searchParams.get("action") || "";
+  const auth = req.headers.get("authorization") || "";
+  const supabase = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_ANON_KEY"), {
+    global: {
+      headers: {
+        Authorization: auth
+      }
+    }
+  });
+  try {
+    const user_id = await getUserId(supabase);
+    if (req.method === "GET" && action === "dashboard") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isoStart = today.toISOString();
+      const rCalories = await supabase.from("daily_calories").select("*").eq("user_id", user_id).gte("day", isoStart).lte("day", isoStart).maybeSingle();
+      const rWeights = await supabase.from("weights").select("*").eq("user_id", user_id).order("recorded_at", {
+        ascending: false
+      }).limit(7);
+      const rWorkouts = await supabase.from("workouts").select("*").eq("user_id", user_id).order("started_at", {
+        ascending: false
+      }).limit(5);
+      const rMeals = await supabase.from("meals").select("id,eaten_at,meal_type").eq("user_id", user_id).gte("eaten_at", isoStart);
+      let items = [];
+      if (rMeals.data?.length) {
+        const mealIds = rMeals.data.map((m)=>m.id);
+        const rItems = await supabase.from("meal_items").select("*").in("meal_id", mealIds);
+        items = rItems.data ?? [];
+      }
+      return Response.json({
+        calories_today: rCalories.data?.calories ?? 0,
+        recent_weights: rWeights.data ?? [],
+        recent_workouts: rWorkouts.data ?? [],
+        today_meal_items: items
+      });
+    }
+    if (req.method === "POST" && action === "add-weight") {
+      const { weight_kg, recorded_at } = await req.json().catch(()=>({}));
+      if (!weight_kg || Number(weight_kg) <= 0) return bad("Invalid weight_kg");
+      const { data, error } = await supabase.from("weights").insert([
+        {
+          user_id,
+          weight_kg: Number(weight_kg),
+          recorded_at: recorded_at ?? new Date().toISOString()
+        }
+      ]).select("*").single();
+      if (error) return bad(error.message);
+      return Response.json({
+        weight: data
+      });
+    }
+    if (req.method === "POST" && action === "create-meal") {
+      const { meal_type, eaten_at, notes } = await req.json().catch(()=>({}));
+      const { data, error } = await supabase.from("meals").insert([
+        {
+          user_id,
+          meal_type: meal_type ?? null,
+          eaten_at: eaten_at ?? new Date().toISOString(),
+          notes: notes ?? null
+        }
+      ]).select("*").single();
+      if (error) return bad(error.message);
+      return Response.json({
+        meal: data
+      });
+    }
+    if (req.method === "POST" && action === "add-meal-item-manual") {
+      const { meal_id, food_name, qty, unit, calories, protein_g, carbs_g, fat_g, meta } = await req.json().catch(()=>({}));
+      if (!meal_id || !food_name) return bad("meal_id and food_name required");
+      const { data, error } = await supabase.from("meal_items").insert([
+        {
+          meal_id,
+          food_name,
+          qty,
+          unit,
+          calories,
+          protein_g,
+          carbs_g,
+          fat_g,
+          meta: meta ?? {}
+        }
+      ]).select("*").single();
+      if (error) return bad(error.message);
+      return Response.json({
+        item: data
+      });
+    }
+    if (req.method === "POST" && action === "add-workout") {
+      const { started_at, ended_at, notes, sets } = await req.json().catch(()=>({}));
+      const w = await supabase.from("workouts").insert([
+        {
+          user_id,
+          started_at: started_at ?? new Date().toISOString(),
+          ended_at: ended_at ?? null,
+          notes: notes ?? null
+        }
+      ]).select("*").single();
+      if (w.error) return bad(w.error.message);
+      const workout_id = w.data.id;
+      if (Array.isArray(sets) && sets.length) {
+        const rows = sets.map((s, i)=>({
+            workout_id,
+            exercise: s.exercise ?? "Unknown",
+            set_index: s.set_index ?? i,
+            reps: s.reps ?? null,
+            weight_kg: s.weight_kg ?? null,
+            duration_sec: s.duration_sec ?? null
+          }));
+        const ins = await supabase.from("workout_sets").insert(rows).select("*");
+        if (ins.error) return bad(ins.error.message);
+      }
+      return Response.json({
+        workout: w.data
+      });
+    }
+    if (req.method === "GET" && action === "weights") {
+      const limit = Number(url.searchParams.get("limit") ?? "30");
+      const r = await supabase.from("weights").select("*").eq("user_id", user_id).order("recorded_at", {
+        ascending: false
+      }).limit(limit);
+      return Response.json({
+        weights: r.data ?? []
+      });
+    }
+    if (req.method === "GET" && action === "workouts") {
+      const limit = Number(url.searchParams.get("limit") ?? "20");
+      const r = await supabase.from("workouts").select("*").eq("user_id", user_id).order("started_at", {
+        ascending: false
+      }).limit(limit);
+      return Response.json({
+        workouts: r.data ?? []
+      });
+    }
+    if (req.method === "GET" && action === "meals-today") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isoStart = today.toISOString();
+      const r = await supabase.from("meals").select("*, meal_items(*)").eq("user_id", user_id).gte("eaten_at", isoStart);
+      return Response.json({
+        meals: r.data ?? []
+      });
+    }
+    return bad("Unknown action", 404);
+  } catch (e) {
+    return Response.json({
+      error: String(e)
+    }, {
+      status: 401
+    });
+  }
+});
+Deno.serve(handler);

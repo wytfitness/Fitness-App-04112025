@@ -1,0 +1,28 @@
+// app/(tabs)/_layout.js
+import { Tabs } from "expo-router";
+import { colors } from "../../lib/theme";
+import { Ionicons } from "@expo/vector-icons";
+
+export default function TabsLayout() {
+  return (
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, height: 64 },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: "#94A3B8",
+        tabBarIcon: ({ color, size }) => {
+          const icon = {
+            index: "grid-outline",
+            food: "restaurant-outline",
+            workout: "barbell-outline",
+            history: "time-outline",
+            progress: "stats-chart-outline",
+          }[route.name];
+          return <Ionicons name={icon} size={size} color={color} />;
+        },
+        tabBarLabelStyle: { fontSize: 12 },
+      })}
+    />
+  );
+}
