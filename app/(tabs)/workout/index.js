@@ -136,6 +136,28 @@ export default function GymHomeTab() {
 
   const startFresh = () => goBuild();
 
+  // …inside component:
+  const [favorites, setFavorites] = useState([]);
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const j = await api.favoriteWorkouts();
+          setFavorites(j.items ?? j.favorites ?? []);
+        } catch (e) {
+          setFavorites([]);
+        }
+      })();
+    }, [])
+  );
+
+  // helper to launch a stored routine
+  const startFavorite = (fav) => {
+    const plan = encodeURIComponent(JSON.stringify(fav.plan || []));
+    const name = fav.name || "Favorite Workout";
+    router.push({ pathname: "/workout/review", params: { name, plan } });
+  };
+
   return (
     <SafeAreaView style={s.screen} edges={["top"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: spacing(6) }} showsVerticalScrollIndicator={false}>
@@ -222,19 +244,25 @@ export default function GymHomeTab() {
           )}
         </View>
 
+       
         {/* FAVORITES */}
         <View style={s.card}>
           <Text style={[s.cardTitle, { marginBottom: spacing(1) }]}>Favorites</Text>
 
-          {FAVORITES.length === 0 ? (
-            <Text style={s.muted}>Star exercises while logging—favorites show up here.</Text>
+          {favorites.length === 0 ? (
+            <Text style={s.muted}>Star a workout on the Complete screen to save it here.</Text>
           ) : (
             <View style={s.favGrid}>
-              {FAVORITES.map((ex) => (
-                <TouchableOpacity key={ex.id} activeOpacity={0.9} style={s.favTile}>
+              {favorites.map((fav) => (
+                <TouchableOpacity
+                  key={fav.id}
+                  activeOpacity={0.9}
+                  style={s.favTile}
+                  onPress={() => startFavorite(fav)}
+                >
                   <Ionicons name="star" size={14} color={colors.warning} />
-                  <Text style={s.favTitle}>{ex.name}</Text>
-                  <Text style={s.favSub}>{ex.group}</Text>
+                  <Text style={s.favTitle}>{fav.name}</Text>
+                  <Text style={s.favSub}>{(fav.plan?.length ?? 0)} exercises</Text>
                 </TouchableOpacity>
               ))}
             </View>

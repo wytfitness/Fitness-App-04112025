@@ -245,6 +245,8 @@ export default function Active() {
         sets: String(done.length),
         volume: String(Math.round(volume)),
         kcal: String(kcal),
+        // NEW: pass routine for “Save as Favorite”
+        plan: encodeURIComponent(JSON.stringify(plan)),
       },
     });
   };

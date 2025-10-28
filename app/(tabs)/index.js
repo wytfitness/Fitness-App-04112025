@@ -53,19 +53,25 @@ export default function Dashboard() {
 
   // macro dialog
   const [showMacros, setShowMacros] = useState(false);
+  
+  //active state
+  const [active, setActive] = useState({ minsToday: 0, streak: 0 });
 
   const loadDashboard = useCallback(async () => {
     // 1) meals/macros (FOOD)
     const mealsRes = (await safeCall(() => api.mealsToday?.())) || {};
     const meals = mealsRes?.meals ?? [];
     const items = meals.flatMap((m) => m.meal_items ?? []);
-    const t = items.reduce((acc, it) => {
-      acc.kcal += Number(it.calories ?? 0);
-      acc.p += Number(it.protein_g ?? 0);
-      acc.c += Number(it.carbs_g ?? 0);
-      acc.f += Number(it.fat_g ?? 0);
-      return acc;
-    }, { kcal: 0, p: 0, c: 0, f: 0 });
+    const t = items.reduce(
+      (acc, it) => {
+        acc.kcal += Number(it.calories ?? 0);
+        acc.p += Number(it.protein_g ?? 0);
+        acc.c += Number(it.carbs_g ?? 0);
+        acc.f += Number(it.fat_g ?? 0);
+        return acc;
+      },
+      { kcal: 0, p: 0, c: 0, f: 0 }
+    );
     setTotals(t);
 
     // 2) goals from DB (fallback profile)
@@ -98,58 +104,83 @@ export default function Dashboard() {
       const tgt = Number(goals.targetWeightKg);
       setWeight({
         valueKg: Number.isFinite(current) ? current : null,
-        deltaKg: (Number.isFinite(current) && Number.isFinite(tgt)) ? current - tgt : 0,
+        deltaKg: Number.isFinite(current) && Number.isFinite(tgt) ? current - tgt : 0,
       });
     }
 
+   
     // 4) last workout (for the "Last Workout" card)
     let lw = await safeCall(() => api.lastWorkout?.());
-    lw = lw?.workout ?? lw;   // ← unwrap the server response
-
-    // dashboard payload may carry last workout
+    // ⬇️ minimal fix: unwrap if server returns { workout: {...} }
+    if (lw && lw.workout) lw = lw.workout;
     if (!lw) {
       const d = await safeCall(() => api.dashboard?.());
       lw = d?.last_workout ?? d?.lastWorkout ?? lw;
     }
-
-    // fallback: list → pick newest by timestamps
     if (!lw) {
       const list = (await safeCall(() => api.workouts?.(25))) || {};
       const arr = list?.workouts ?? list?.items ?? (Array.isArray(list) ? list : []);
       lw = pickLatestWorkout(arr);
     }
-
-    // final fallback: query Supabase directly (older projects / missing actions)
     if (!lw) lw = await fetchLastWorkoutDirect();
-
     if (lw) {
       setWorkout(normalizeWorkout(lw));
     } else {
       setWorkout({ title: "—", durationMin: 0, calories: 0, dateLabel: "", completed: false });
     }
 
-    // 4b) 🔹 workouts today → sum kcal burned (EXERCISE)
+    // 4b) Workouts today → exercise kcal + active minutes + streak
     try {
-      const wks = (await safeCall(() => api.workouts?.(20))) || {};
+      const wks = (await safeCall(() => api.workouts?.(60))) || {};
       const arr = wks?.workouts ?? wks?.items ?? (Array.isArray(wks) ? wks : []);
       const todayISO = new Date().toISOString().slice(0, 10);
 
-      const kcal = arr
-        .filter((w) => {
-          const d =
-            w.date_label ?? w.date ?? w.completed_at ?? w.recorded_at ?? w.started_at ?? "";
-          if (typeof d === "string") {
-            if (d.toLowerCase?.() === "today") return true;
-            return d.slice(0, 10) === todayISO;
-          }
-          return false;
-        })
-        .reduce((sum, w) => sum + Number(w.calories ?? w.calories_burned ?? 0), 0);
+      // duration (min) from a row
+      const mins = (row) => {
+        const s = Date.parse(row.started_at ?? row.start_time ?? row.start);
+        const e = Date.parse(row.ended_at ?? row.end_time ?? row.completed_at ?? row.date);
+        if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
+          return Math.max(1, Math.round((e - s) / 60000));
+        }
+        return Math.max(0, Math.round(Number(row.duration_min ?? row.duration ?? 0)));
+      };
 
+      // Today aggregates
+      let kcal = 0, minsToday = 0;
+      for (const r of arr) {
+        const d = r.date_label ?? r.date ?? r.completed_at ?? r.recorded_at ?? r.started_at ?? "";
+        const day = typeof d === "string" ? d.slice(0, 10) : "";
+        if (day === todayISO || d?.toLowerCase?.() === "today") {
+          kcal += Number(r.calories ?? r.calories_burned ?? 0);
+          minsToday += mins(r);
+        }
+      }
       setExerciseKcal(kcal);
+
+      // Streak (consecutive days with any workout, counting today)
+      const daysWithWorkout = new Set(
+        arr
+          .map((r) =>
+            String(
+              r.completed_at || r.ended_at || r.recorded_at || r.started_at || r.date || ""
+            ).slice(0, 10)
+          )
+          .filter(Boolean)
+      );
+      let streak = 0;
+      for (let i = 0; i < 90; i++) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        if (daysWithWorkout.has(key)) streak++;
+        else break;
+      }
+
+      setActive?.({ minsToday, streak });
     } catch (e) {
       console.warn("dashboard fetch (workouts today):", e?.message || e);
       setExerciseKcal(0);
+      setActive?.({ minsToday: 0, streak: 0 });
     }
 
     // 5) daily activity (optional)
@@ -170,6 +201,7 @@ export default function Dashboard() {
           ]
     );
   }, [goals.targetWeightKg, steps.goal, steps.value, water.ml]);
+
 
   useFocusEffect(useCallback(() => { loadDashboard(); }, [loadDashboard]));
 
@@ -228,12 +260,39 @@ export default function Dashboard() {
     // hiit: require("../../assets/workouts/hiit.jpg"),
     // strength: require("../../assets/workouts/strength.jpg"),
   };
+  // ---- Recommended plans (tap a card to start) ----
+  const RECOMMENDED_PLANS = {
+    yoga: {
+      name: "Morning Yoga",
+      // Keep our existing Active screen happy: reps are “seconds/breaths”
+      plan: [
+        { id: "cat_cow",          name: "Cat–Cow",              sets: 2, reps: 10, weight_kg: null, group: "Mobility" },
+        { id: "downward_dog",     name: "Downward Dog (hold)",  sets: 2, reps: 30, weight_kg: null, group: "Mobility" },
+        { id: "child_pose",       name: "Child’s Pose (hold)",  sets: 2, reps: 30, weight_kg: null, group: "Mobility" },
+        { id: "sun_salutation_a", name: "Sun Salutation A",     sets: 2, reps: 10, weight_kg: null, group: "Flow" },
+        { id: "seated_forward",   name: "Seated Forward Fold",  sets: 2, reps: 30, weight_kg: null, group: "Stretch" },
+      ],
+    },
+  };
   const DEFAULT_WORKOUT_IMG = require("../../assets/workouts/default.jpg");
 
   function imgFor(rec) {
     // Prefer remote if API gives one; otherwise map by id, else default
     if (rec?.imageUrl) return { uri: rec.imageUrl };
     return WORKOUT_IMAGES[rec?.id] || DEFAULT_WORKOUT_IMG;
+  }
+  function startRecommended(recOrId) {
+    const key = typeof recOrId === "string" ? recOrId : recOrId?.id;
+    const cfg = RECOMMENDED_PLANS[key];
+    if (!cfg) return;
+
+    router.push({
+      pathname: "/workout/review",
+      params: {
+        name: cfg.name,
+        plan: encodeURIComponent(JSON.stringify(cfg.plan)),
+      },
+    });
   }
 
   // ---- Last-workout normalizers ----
@@ -394,8 +453,11 @@ function labelFromWorkout(w) {
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </View>
               <Text style={s.tileTitle}>Active</Text>
-              <Text style={s.tileSub}>12 day streak 🔥</Text>
-              <TouchableOpacity onPress={() => router.push("/workout/select-routine")} style={s.tileBtn}>
+              {/* <Text style={s.tileSub}>12 day streak 🔥</Text> */}
+               <Text style={s.tileSubSm}> 
+                {active.minsToday} min today • {Math.round(exerciseKcal)} kcal
+              </Text>
+               <TouchableOpacity onPress={() => router.push("/(tabs)/history")} style={s.tileBtn}>
                 <Text style={s.tileBtnTxt}>View Details</Text>
               </TouchableOpacity>
             </View>
@@ -467,14 +529,24 @@ function labelFromWorkout(w) {
         {/* RECOMMENDED WORKOUTS */}
         <View style={[s.rowBetween, { marginTop: spacing(3), paddingBottom: spacing(1.5) }]}>
           <Text style={s.sectionTitle}>Recommended Workouts</Text>
-          <TouchableOpacity><Text style={s.link}>View All ›</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/workout/recommended")}>
+            <Text style={s.link}>View All ›</Text>
+          </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 2, paddingBottom: spacing(0.5) }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 2, paddingBottom: spacing(0.5) }}>
           {recs.map((r) => (
-            <View key={r.id} style={[s.recCard, shadow]}>
+            <TouchableOpacity
+              key={r.id}
+              activeOpacity={0.9}
+              style={[s.recCard, shadow]}
+              onPress={() => startRecommended(r)}   // ← launch Morning Yoga if r.id === "yoga"
+            >
               <View style={s.recImageWrap}>
                 <Image source={imgFor(r)} style={s.recImage} />
-                {r.badge ? <View style={s.newBadge}><Text style={s.newBadgeTxt}>{r.badge}</Text></View> : null}
+                {r.badge ? (
+                  <View style={s.newBadge}><Text style={s.newBadgeTxt}>{r.badge}</Text></View>
+                ) : null}
               </View>
               <Text style={s.recTitle} numberOfLines={1}>{r.title}</Text>
               <View style={s.recMeta}>
@@ -483,7 +555,7 @@ function labelFromWorkout(w) {
                 <Ionicons name="flame-outline" size={14} color={colors.textMuted} />
                 <Text style={s.recMetaTxt}>{r.kcal} kcal</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
 
