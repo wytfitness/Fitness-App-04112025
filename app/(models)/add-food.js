@@ -32,10 +32,12 @@ export default function AddFoodModal() {
 
   // ===== Search tab state =====
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [qty, setQty] = useState("100"); // grams
   const [searchLoading, setSearchLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [searchErr, setSearchErr] = useState(null);
+  const [showSpinner, setShowSpinner] = useState(false); // spinner after short delay
 
   // ===== Barcode tab state =====
   const [ean, setEan] = useState("");
@@ -47,7 +49,7 @@ export default function AddFoodModal() {
   const [scannerAvailable, setScannerAvailable] = useState(false);
   const [camStatus, setCamStatus] = useState(null); // 'granted' | 'denied' | null
   const scannedLock = useRef(false);
-
+  
   // If no mealId passed, create a meal for today (snack)
   useEffect(() => {
     let alive = true;
@@ -69,56 +71,73 @@ export default function AddFoodModal() {
   }, [mealId]);
 
   // Debounced search (Search tab)
+  // 1) Debounce keystrokes → updates debouncedQ after 350ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ((q || "").trim()), 350);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  // 2) Only show spinner if search is taking >250ms (less flicker)
+  useEffect(() => {
+    let t;
+    if (searchLoading) t = setTimeout(() => setShowSpinner(true), 250);
+    else setShowSpinner(false);
+    return () => t && clearTimeout(t);
+  }, [searchLoading]);
+
+  // 3) Fetch on debouncedQ; abort previous request if user keeps typing
   useEffect(() => {
     if (tab !== "search") return;
-    const h = setTimeout(async () => {
-      const term = (q || "").trim();
-      if (term.length < 2) {
-        setResults([]);
-        setSearchErr(null);
-        return;
-      }
-      try {
-        setSearchLoading(true);
-        setSearchErr(null);
-        const rows = await api.searchFoods(term, 25);
-        setResults(rows || []);
-      } catch (e) {
-        setSearchErr(String(e?.message || e));
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(h);
-  }, [q, tab]);
 
-  // Lazy-load scanner when user switches to Barcode tab
-  useEffect(() => {
-    if (tab !== "barcode") return;
+    const term = debouncedQ;
+    if (!term || term.length < 2) {
+      setResults([]);
+      setSearchErr(null);
+      setSearchLoading(false);
+      return;
+    }
 
-    let cancelled = false;
-    (async () => {
-      try {
-        // dynamic import so it doesn’t load unless needed
-        const mod = await import("expo-barcode-scanner");
-        if (cancelled) return;
+    const ctrl = new AbortController();
+    setSearchLoading(true);
+    setSearchErr(null);
 
-        ScannerModRef.current = mod; // { BarCodeScanner, requestPermissionsAsync }
-        setScannerAvailable(true);
+    api.searchFoods(term, 25, { signal: ctrl.signal })
+      .then((rows) => setResults(rows || []))
+      .catch((e) => {
+        if (e.name !== "AbortError") setSearchErr(String(e?.message || e));
+      })
+      .finally(() => setSearchLoading(false));
 
-        const { status } = await mod.requestPermissionsAsync();
-        if (!cancelled) setCamStatus(status);
-      } catch (e) {
-        // Module missing or native side not available -> fall back to manual EAN
-        setScannerAvailable(false);
-        setCamStatus("denied");
-      }
-    })();
+    return () => ctrl.abort();
+  }, [debouncedQ, tab]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [tab]);
+    // Lazy-load scanner when user switches to Barcode tab
+    useEffect(() => {
+      if (tab !== "barcode") return;
+
+      let cancelled = false;
+      (async () => {
+        try {
+          // dynamic import so it doesn’t load unless needed
+          const mod = await import("expo-barcode-scanner");
+          if (cancelled) return;
+
+          ScannerModRef.current = mod; // { BarCodeScanner, requestPermissionsAsync }
+          setScannerAvailable(true);
+
+          const { status } = await mod.requestPermissionsAsync();
+          if (!cancelled) setCamStatus(status);
+        } catch (e) {
+          // Module missing or native side not available -> fall back to manual EAN
+          setScannerAvailable(false);
+          setCamStatus("denied");
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [tab]);
 
   const addDisabled = useMemo(
     () => isNaN(Number(qty)) || Number(qty) <= 0,
@@ -285,7 +304,7 @@ export default function AddFoodModal() {
                       </View>
 
                       {searchErr ? <Text style={s.err}>{searchErr}</Text> : null}
-                      {searchLoading ? <ActivityIndicator style={{ marginTop: spacing(1) }} /> : null}
+                      {showSpinner ? <ActivityIndicator style={{ marginTop: spacing(1) }} /> : null}
                     </View>
                   }
                   ItemSeparatorComponent={() => <View style={{ height: 10 }} />}

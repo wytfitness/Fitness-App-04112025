@@ -131,38 +131,6 @@ export default function EditGoals() {
               />
 
               <Text style={[sEdit.label, { marginTop: spacing(2) }]}>
-                Macros
-              </Text>
-              <View style={sEdit.macroRow}>
-                <Col label="Carbs">
-                  <RowInput
-                    value={carbs}
-                    onChangeText={setCarbs}
-                    suffix="%"
-                    keyboardType="numeric"
-                  />
-                </Col>
-
-                <Col label="Protein">
-                  <RowInput
-                    value={protein}
-                    onChangeText={setProtein}
-                    suffix="%"
-                    keyboardType="numeric"
-                  />
-                </Col>
-
-                <Col label="Fat">
-                  <RowInput
-                    value={fat}
-                    onChangeText={setFat}
-                    suffix="%"
-                    keyboardType="numeric"
-                  />
-                </Col>
-              </View>
-
-              <Text style={[sEdit.label, { marginTop: spacing(2) }]}>
                 Water Intake
               </Text>
               <RowInput

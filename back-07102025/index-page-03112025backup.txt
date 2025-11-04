@@ -75,39 +75,6 @@ function caloriesOf(row, latestWeightKg = 70) {
   const MET = 6; // moderate estimate
   return Math.round(MET * 3.5 * latestWeightKg / 200 * mins);
 }
-
-// Weight-based macro goals (fallbacks if no weight available)
-const PROTEIN_G_PER_KG = 1.6;
-const FAT_G_PER_KG = 0.8;
-
-function deriveMacroGoals({ cal, macroPct, weightKg }) {
-  if (Number.isFinite(weightKg) && weightKg > 0) {
-    const pGoalG = Math.max(0, Math.round(PROTEIN_G_PER_KG * weightKg));
-    const fGoalG = Math.max(0, Math.round(FAT_G_PER_KG * weightKg));
-    const usedCal = pGoalG * 4 + fGoalG * 9;
-    const carbCal = Math.max(0, Math.round((cal || 0) - usedCal));
-    const cGoalG = Math.round(carbCal / 4);
-    return { p: pGoalG, c: cGoalG, f: fGoalG };
-  }
-
-  // fallback to percents only if no weight
-  const safeCal = Number(cal || 0);
-  const pPct = Number(macroPct?.p || 0);
-  const cPct = Number(macroPct?.c || 0);
-  const fPct = Number(macroPct?.f || 0);
-
-  const pGoal = (safeCal * (pPct / 100)) / 4;
-  const cGoal = (safeCal * (cPct / 100)) / 4;
-  const fGoal = (safeCal * (fPct / 100)) / 9;
-
-  return {
-    p: Math.max(0, Math.round(pGoal || 0)),
-    c: Math.max(0, Math.round(cGoal || 0)),
-    f: Math.max(0, Math.round(fGoal || 0)),
-  };
-}
-
-
 /** ===================================================================== */
 
 export default function Dashboard() {
@@ -337,17 +304,10 @@ export default function Dashboard() {
 
   useFocusEffect(useCallback(() => { loadDashboard(); }, [loadDashboard]));
 
-
   // derived values for goals/progress
-  const weightForMacros = Number(
-    goals?.targetWeightKg ?? weight?.valueKg
-  );
-
-  const { p: pGoal, c: cGoal, f: fGoal } = deriveMacroGoals({
-    cal: goals.cal,
-    macroPct,          // still passed in, but weight-based branch is used
-    weightKg: weightForMacros,
-  });
+  const pGoal = (goals.cal * (macroPct.p / 100)) / 4;
+  const cGoal = (goals.cal * (macroPct.c / 100)) / 4;
+  const fGoal = (goals.cal * (macroPct.f / 100)) / 9;
 
   const clampPct = (v) => Math.max(0, Math.min(100, Math.round(v)));
   const proteinPct = clampPct((totals.p / pGoal) * 100 || 0);
@@ -531,6 +491,20 @@ export default function Dashboard() {
       <ScrollView contentContainerStyle={[s.container, { paddingHorizontal: PADX }]} showsVerticalScrollIndicator={false}>
         {/* TOP BAR */}
         <View style={[s.topBar, { paddingTop: spacing(2.5) }]}>
+          <TouchableOpacity onPress={openDrawer} style={s.iconBtn}>
+            <Ionicons name="menu-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
+
+          <View style={[s.searchWrap, shadow]}>
+            <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+            <TextInput
+              placeholder="Search workouts & meals…"
+              placeholderTextColor={colors.textMuted}
+              style={s.searchInput}
+              returnKeyType="search"
+            />
+          </View>
+
           <TouchableOpacity onPress={() => router.push("/settings")} style={s.iconBtn}>
             <Ionicons name="person-circle-outline" size={26} color={colors.text} />
           </TouchableOpacity>
@@ -547,76 +521,79 @@ export default function Dashboard() {
         </View>
 
         {/* ROW: Workout + Nutrition */}
-        <View style={s.tileContent}>
-          <Text style={s.tileOver}>NUTRITION</Text>
-
-          <View style={s.macrosGrid}>
-            {/* Calories */}
-            {/* Calories */}
-            <View style={[s.smallCard, shadow]}>
-              <Text style={s.smallLabel}>Calories</Text>
-              <View style={s.inline}>
-                <Text style={s.smallValue}>{nf.format(Math.round(totals.kcal))}</Text>
-                <Text style={s.smallUnit}>kcal</Text>
+        <View style={s.row2}>
+          <Card style={[s.tile, s.tileShadow]}>
+            <LinearGradient
+              colors={colors.home.activeGrad}
+              locations={colors.home.activeGradStops || [0, 0.55, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.tileBg}
+            />
+            <View pointerEvents="none" style={s.tileInnerBorder} />
+            <View style={s.tileContent}>
+              <View style={s.tileHead}>
+                <View style={[s.tileIcon, { backgroundColor: colors.home.activeIconBg }]}>
+                  <Ionicons name="flame-outline" size={16} color={colors.home.activeAccent} />
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </View>
-              <View style={s.smallIconBadge}>
-                <Ionicons name="flame-outline" size={18} color={colors.orange} />
-              </View>
-
-              {/* / goal footer */}
-              <Text style={s.smallGoal}>/ {nf.format(Math.round(goals.cal))} kcal</Text>
+              <Text style={s.tileTitle}>Active</Text>
+              <Text style={s.tileSubSm}>
+                {active.minsToday} min today • {Math.round(exerciseKcal)} kcal
+              </Text>
+              <TouchableOpacity onPress={() => router.push("/(tabs)/history")} style={s.tileBtn}>
+                <Text style={s.tileBtnTxt}>View Details</Text>
+              </TouchableOpacity>
             </View>
+          </Card>
 
-            {/* Protein (dark) */}
-            <View style={[s.smallCard, s.smallCardDark, shadow]}>
-              <Text style={[s.smallLabel, { color: colors.onHeaderDarkMuted }]}>Protein</Text>
-              <View style={s.inline}>
-                <Text style={[s.smallValue, { color: colors.onHeaderDark }]}>{Math.round(totals.p)}</Text>
-                <Text style={[s.smallUnit, { color: colors.onHeaderDarkMuted }]}>g</Text>
+          <Card style={[s.tile, s.tileShadow]}>
+            <LinearGradient
+              colors={colors.home.nutritionGrad}
+              locations={colors.home.nutritionGradStops || [0, 0.6, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.tileBg}
+            />
+            <View pointerEvents="none" style={s.tileInnerBorder} />
+            <View style={s.tileContent}>
+              <View style={s.tileHead}>
+                <View style={[s.tileIcon, { backgroundColor: colors.home.nutritionIconBg }]}>
+                  <Ionicons name="nutrition-outline" size={16} color={colors.home.nutritionAccent} />
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </View>
-              <View style={[s.smallIconBadge, { backgroundColor: colors.overlayOnDark }]}>
-                <Ionicons name="egg-outline" size={18} color={colors.onHeaderDarkMuted} />
-              </View>
+              <Text style={s.tileOver}>NUTRITION</Text>
+              <TouchableOpacity onPress={() => setShowMacros(true)}>
+                <Text style={[s.tileLink, { color: colors.home.nutritionAccent }]}>Track Macros</Text>
+              </TouchableOpacity>
 
-              {/* / goal footer on dark */}
-              <Text style={[s.smallGoal, s.smallGoalOnDark]}>/ {nf.format(Math.round(pGoal))} g</Text>
+              {/* FOOD line (unchanged) */}
+              <Text style={s.tileSub}>
+                {nf.format(Math.round(totals.kcal))} of {nf.format(goals.cal)} kcal
+              </Text>
+
+              {/* COMPACT: Exercise + Remaining on one small line */}
+              <Text style={s.tileSubSm} numberOfLines={1}>
+                Ex: <Text style={{ color: colors.info }}>
+                  -{nf.format(Math.round(exerciseKcal))}
+                </Text>
+                {"  •  "}
+                <Text style={{ color: remaining < 0 ? colors.danger : colors.success }}>
+                  {remaining < 0
+                    ? `Over: ${nf.format(Math.abs(remaining))}`
+                    : `Rem: ${nf.format(remaining)}`}
+                </Text> kcal
+              </Text>
+
+              <Progress pct={kcalPct} fill={colors.home.nutritionBar} track={colors.home.nutritionTrack} />
             </View>
-
-            {/* Carbs (blue) */}
-            <View style={[s.smallCard, s.smallCardBlue, shadow]}>
-              <Text style={[s.smallLabel, { color: colors.onInfo }]}>Carbs</Text>
-              <View style={s.inline}>
-                <Text style={[s.smallValue, { color: colors.onInfo }]}>{Math.round(totals.c)}</Text>
-                <Text style={[s.smallUnit, { color: colors.onInfo }]}>g</Text>
-              </View>
-              <View style={[s.smallIconBadge, { backgroundColor: colors.overlayOnDark }]}>
-                <Ionicons name="leaf-outline" size={18} color={colors.onInfo} />
-              </View>
-
-              {/* / goal footer on colored bg */}
-              <Text style={[s.smallGoal, s.smallGoalOnInfo]}>/ {nf.format(Math.round(cGoal))} g</Text>
-            </View>
-
-            {/* Fat */}
-            <View style={[s.smallCard, shadow]}>
-              <Text style={s.smallLabel}>Fat</Text>
-              <View style={s.inline}>
-                <Text style={s.smallValue}>{Math.round(totals.f)}</Text>
-                <Text style={s.smallUnit}>g</Text>
-              </View>
-              <View style={s.smallIconBadge}>
-                <Ionicons name="pizza-outline" size={18} color={colors.orange} />
-              </View>
-
-              {/* / goal footer */}
-              <Text style={s.smallGoal}>/ {nf.format(Math.round(fGoal))} g</Text>
-            </View>
-          </View>
+          </Card>
         </View>
 
-
         {/* DAILY ACTIVITY */}
-        <Card style={[s.block, shadow, { padding: 20, marginTop: spacing(5) }]}>
+        <Card style={[s.block, { padding: 16, marginTop: spacing(5) }]}>
           <View style={s.rowBetween}>
             <Text style={s.sectionTitle}>Daily Activity</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -746,7 +723,27 @@ export default function Dashboard() {
           </Pressable>
         </Pressable>
       </Modal>
-      
+
+      {/* ==== LEFT DRAWER ==== */}
+      <Modal visible={drawerOpen} transparent animationType="none" onRequestClose={closeDrawer}>
+        <Pressable style={s.drawerBackdrop} onPress={closeDrawer}>
+          <Animated.View style={[s.drawer, { width: DRAWER_WIDTH, transform: [{ translateX: drawerX }] }]}>
+            <View style={s.drawerHeader}>
+              <Text style={s.drawerTitle}>Menu</Text>
+              <TouchableOpacity onPress={closeDrawer} style={s.iconBtn}>
+                <Ionicons name="close" size={22} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <DrawerItem label="Dashboard" onPress={() => go("/(tabs)")} />
+            <DrawerItem label="Diary"     onPress={() => go("/(tabs)/food")} />
+            <DrawerItem label="Gym"       onPress={() => go("/(tabs)/workout")} />
+            <DrawerItem label="History"   onPress={() => go("/(tabs)/history")} />
+            <DrawerItem label="Progress"  onPress={() => go("/(tabs)/progress")} />
+            <DrawerItem label="Settings"  onPress={() => go("/settings")} />
+          </Animated.View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -787,7 +784,7 @@ function Insight({ label, value }) {
 }
 
 // small circular ring; showTexts lets us reuse it inside the macro cards
-function ActivityRing({ pct = 0.6, color = colors.primary, icon = "help", value, label, size = 96, stroke = 10, showTexts = true }) {
+function ActivityRing({ pct = 0.6, color = colors.primary, icon = "help", value, label, size = 82, stroke = 8, showTexts = true }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(1, pct));
@@ -804,7 +801,7 @@ function ActivityRing({ pct = 0.6, color = colors.primary, icon = "help", value,
             transform={`rotate(-90 ${size/2} ${size/2})`}
           />
         </Svg>
-        <View style={s.activityIconWrap}><Ionicons name={icon} size={22} color={color} /></View>
+        <View style={s.activityIconWrap}><Ionicons name={icon} size={20} color={color} /></View>
       </View>
       {showTexts && (<><Text style={s.activityValue}>{value}</Text><Text style={s.activityLabel}>{label}</Text></>)}
     </View>
@@ -940,12 +937,11 @@ const s = StyleSheet.create({
   qpillTxt: { color: colors.text, fontWeight: "700", fontSize: 12 },
 
   /* Daily Activity */
-  activityRow: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing(2), paddingHorizontal: 2 },
-
+  activityRow: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing(1), paddingHorizontal: 2 },
   activityItem: { alignItems: "center", width: "32%" },
   activityIconWrap: { position: "absolute" },
-  activityValue: { color: colors.text, fontWeight: "800", marginTop: 8, fontSize: 20 },
-  activityLabel: { color: colors.textMuted, marginTop: 4, fontSize: 14, fontWeight: "600" },
+  activityValue: { color: colors.text, fontWeight: "800", marginTop: 6 },
+  activityLabel: { color: colors.textMuted, marginTop: 2 },
 
   /* Recs */
   recCard: { width: 180, borderRadius: 16, marginRight: 12, backgroundColor: colors.card, overflow: "hidden" },
@@ -1022,10 +1018,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 12,
   },
-  topActions: { alignItems: "flex-end" },
+  topActions: { alignItems: "flex-end", marginTop: spacing(1) },
 
   editBtnTxt: {
-    paddingTop: 0,
+    paddingTop: 7,
     color: colors.textMuted,
     fontSize: 17,
     lineHeight: 20,
@@ -1038,72 +1034,5 @@ const s = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     includeFontPadding: false,
-  },
-
-  // added new styles 
-  macrosGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between", // ensures 2 per row
-    marginTop: 12,
-  },
-  smallCard: {
-    flexBasis: "48%",   // % width that works well with wrap
-    maxWidth: "48%",
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-    position: "relative",
-    minHeight: 120,
-    marginBottom: 12,   // vertical gap (gap unsupported in some RN builds)
-  },
-  smallCardDark: {
-    backgroundColor: colors.headerDark,
-  },
-  smallCardBlue: {
-    backgroundColor: colors.info,
-  },
-  smallLabel: {
-    color: colors.textMuted,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  smallValue: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: colors.text,
-    marginTop: 8,
-  },
-  smallUnit: {
-    marginLeft: 6,
-    color: colors.textMuted,
-    fontSize: 15,
-    alignSelf: "flex-end",
-    paddingBottom: 4,
-  },
-  smallIconBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: colors.overlayOnLight, // dark/blue override inline in JSX
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-  },
-  smallGoal: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.textMuted,          // default for light cards
-  },
-
-  // color tweaks for dark/blue variants
-  smallGoalOnDark: {
-    color: colors.onHeaderDarkMuted,  // legible over headerDark
-  },
-  smallGoalOnInfo: {
-    color: colors.onInfo,             // legible over info background
   },
 });

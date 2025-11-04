@@ -50,14 +50,32 @@ function RangeTabs({ value, onChange }) {
       {["7 Days", "30 Days"].map((label) => {
         const mapped = label.startsWith("7") ? "7D" : "30D";
         const active = mapped === value;
+
+        if (active) {
+          return (
+            <View key={label} style={[p.rangeTab, p.rangeTabActiveShell]}>
+              <LinearGradient
+                colors={colors.progress.tabGrad}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={p.rangeTabGrad}
+              >
+                <TouchableOpacity activeOpacity={0.9} onPress={() => onChange(mapped)}>
+                  <Text style={p.rangeTxtActive}>{label}</Text>
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          );
+        }
+
         return (
           <TouchableOpacity
             key={label}
             onPress={() => onChange(mapped)}
             activeOpacity={0.9}
-            style={[p.rangeTab, active && p.rangeTabActive]}
+            style={[p.rangeTab, p.rangeTabInactive]}
           >
-            <Text style={[p.rangeTxt, active && p.rangeTxtActive]}>{label}</Text>
+            <Text style={p.rangeTxt}>{label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -70,32 +88,64 @@ function MetricList({ value, onChange, options }) {
     <View style={p.metricWrap}>
       {options.map((m, i) => {
         const active = m === value;
+
         return (
           <TouchableOpacity
             key={m}
             onPress={() => onChange(m)}
-            activeOpacity={0.9}
-            style={[p.metricItem, i === 0 && { marginTop: 0 }, active && p.metricItemActive]}
+            activeOpacity={0.92}
+            style={[
+              p.metricItemBase,
+              i === 0 && { marginTop: 0 },
+              active ? p.metricItemActive : p.metricItemInactive,
+            ]}
           >
             <View style={p.metricLeft}>
-              <View style={[p.iconBubble, active && p.iconBubbleActive]}>
-                <Ionicons
-                  name={
-                    m.includes("Net")
-                      ? "pulse-outline"
-                      : m.includes("Meals")
-                      ? "restaurant-outline"
-                      : m.includes("Exercise")
-                      ? "fitness-outline"
-                      : "body-outline"
-                  }
-                  size={16}
-                  color={active ? colors.progress.lineDeep : colors.textMuted}
-                />
-              </View>
-              <Text style={[p.metricTxt, active && { color: colors.text }]}>{m}</Text>
+              {/* icon bubble */}
+              {active ? (
+                <LinearGradient
+                  colors={["#E8FFF7", "#DFFAF4"]}  // light mint bubble
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={p.iconBubbleGrad}
+                >
+                  <Ionicons
+                    name={
+                      m.includes("Net")
+                        ? "pulse-outline"
+                        : m.includes("Meals")
+                        ? "restaurant-outline"
+                        : m.includes("Exercise")
+                        ? "fitness-outline"
+                        : "body-outline"
+                    }
+                    size={16}
+                    color={colors.progress.line}
+                  />
+                </LinearGradient>
+              ) : (
+                <View style={p.iconBubbleMuted}>
+                  <Ionicons
+                    name={
+                      m.includes("Net")
+                        ? "pulse-outline"
+                        : m.includes("Meals")
+                        ? "restaurant-outline"
+                        : m.includes("Exercise")
+                        ? "fitness-outline"
+                        : "body-outline"
+                    }
+                    size={16}
+                    color={colors.textMuted}
+                  />
+                </View>
+              )}
+
+              <Text style={[p.metricTxt, active && p.metricTxtActive]}>{m}</Text>
             </View>
-            {active ? <View style={p.activeDot} /> : <View style={{ width: 8 }} />}
+
+            {/* status dot on the right for active row */}
+            {active ? <View style={p.activeDot} /> : null}
           </TouchableOpacity>
         );
       })}
@@ -341,7 +391,7 @@ export default function ProgressTab() {
   return (
     <SafeAreaView style={p.screen} edges={["top"]}>
       {/* soft page gradient */}
-      <LinearGradient colors={["#F8F7FF", "#F3F7FF"]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={p.bgGrad} />
+      <LinearGradient colors={["#F8F7FF", "#F3F7FF"]} start={{ x:0, y: 0 }} end={{ x: 0, y: 1 }} style={p.bgGrad} />
 
       <ScrollView contentContainerStyle={{ paddingBottom: spacing(3) }} showsVerticalScrollIndicator={false}>
         {/* Heading */}
@@ -356,8 +406,16 @@ export default function ProgressTab() {
         {/* Metric list */}
         <MetricList value={metric} onChange={setMetric} options={METRIC_OPTS} />
 
+       
         {/* Chart Card */}
         <View style={p.chartCard}>
+          <LinearGradient
+            colors={["#FFFFFF", "#FBFEFF"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={p.cardGrad}
+            pointerEvents="none"
+          />
           <ChartHeader
             title={
               metric === "Net kcal"
@@ -381,45 +439,75 @@ export default function ProgressTab() {
           )}
         </View>
 
+
         {/* Stats */}
-        <View style={p.statsRow}>
-          <View style={p.statBox}>
-            <Text style={p.statLbl}>Average</Text>
-            <Text style={p.statVal}>{avgText}</Text>
-            <Text style={p.statSub}>daily avg</Text>
-          </View>
-          <View style={p.statBox}>
-            <Text style={p.statLbl}>Max</Text>
-            <Text style={p.statVal}>{maxText}</Text>
-            <Text style={p.statSub}>peak value</Text>
-          </View>
-          <View style={p.statBox}>
-            <Text style={p.statLbl}>Min</Text>
-            <Text style={p.statVal}>{minText}</Text>
-            <Text style={p.statSub}>lowest</Text>
+        {/* Stats */}
+        <View style={p.statsOuter}>
+          <LinearGradient
+            colors={["rgba(247,245,255,0)", "rgba(247,225,255,0.6)"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={p.statsBgGrad}
+            pointerEvents="none"
+          />
+          <View style={p.statsRow}>
+            <View style={p.statBox}>
+              <Text style={p.statLbl}>Average</Text>
+              <Text style={p.statVal}>{avgText}</Text>
+
+              <View style={p.statExtraRow}>
+                <View style={p.statPill}>
+                  <Ionicons
+                    name="trending-up-outline"
+                    size={12}
+                    color={colors.progress.lineDeep}
+                  />
+                  <Text style={p.statPillTxt}>+5.2%</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={p.statBox}>
+              <Text style={p.statLbl}>Max</Text>
+              <Text style={p.statVal}>{maxText}</Text>
+              <Text style={p.statSub}>Peak value</Text>
+            </View>
+
+            <View style={p.statBox}>
+              <Text style={p.statLbl}>Min</Text>
+              <Text style={p.statVal}>{minText}</Text>
+              <Text style={p.statSub}>Lowest</Text>
+            </View>
           </View>
         </View>
 
         {/* Info card */}
         <View style={p.infoCard}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={p.iconBubble}>
-              <Ionicons name="pulse-outline" size={16} color={colors.progress.lineDeep} />
-            </View>
-            <Text style={[p.infoTitle, { marginLeft: 8 }]}>
-              {metric === "Net kcal" ? "Net Calories" : metric === "Meals kcal" ? "Meals Kcal" : metric === "Exercise kcal" ? "Exercise Kcal" : "Weight"}
-            </Text>
+        <LinearGradient
+          colors={["#FFFFFF", "#FCF7FF"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={p.cardGrad}
+          pointerEvents="none"
+        />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={p.iconBubble}>
+            <Ionicons name="pulse-outline" size={16} color={colors.progress.lineDeep} />
           </View>
-          <Text style={p.infoDesc}>
-            {metric === "Net kcal"
-              ? "Intake − Exercise. Positive means surplus; negative means deficit. Track your daily balance to meet your fitness goals."
-              : metric === "Meals kcal"
-              ? "Sum of all logged meals for each day. Helps you spot overeating or under-fueling trends."
-              : metric === "Exercise kcal"
-              ? "Calories burned from workouts. Higher means more total output."
-              : "Your body weight trend. Slow, steady change is healthier than sharp jumps."}
+          <Text style={[p.infoTitle, { marginLeft: 8 }]}>
+            {metric === "Net kcal" ? "Net Calories" : metric === "Meals kcal" ? "Meals Kcal" : metric === "Exercise kcal" ? "Exercise Kcal" : "Weight"}
           </Text>
         </View>
+        <Text style={p.infoDesc}>
+          {metric === "Net kcal"
+            ? "Intake − Exercise. Positive means surplus; negative means deficit. Track your daily balance to meet your fitness goals."
+            : metric === "Meals kcal"
+            ? "Sum of all logged meals for each day. Helps you spot overeating or under-fueling trends."
+            : metric === "Exercise kcal"
+            ? "Calories burned from workouts. Higher means more total output."
+            : "Your body weight trend. Slow, steady change is healthier than sharp jumps."}
+        </Text>
+      </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -427,85 +515,180 @@ export default function ProgressTab() {
 
 /* ---------- styles ---------- */
 const p = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "transparent", paddingHorizontal: spacing(2) },
+  screen: {
+    flex: 1,
+    backgroundColor: "transparent",
+    paddingHorizontal: spacing(2.5),
+    paddingTop: spacing(2),
+  },
   bgGrad: { position: "absolute", inset: 0 },
 
   header: { marginTop: spacing(2), marginBottom: spacing(2) },
-  title: { fontSize: 18, fontWeight: "700", color: colors.text, marginBottom: 4 },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 4,
+  },
   subtitle: { fontSize: 13, fontWeight: "400", color: colors.textMuted },
 
-  // Range tabs (use theme palette)
+  /* ---------- Range tabs (gradient active, white inactive) ---------- */
   rangeWrap: {
     flexDirection: "row",
-    borderRadius: 20,
+    borderRadius: 22,
     backgroundColor: colors.progress.tabsBg,
-    padding: 6,
+    padding: 8,
     marginBottom: spacing(2),
-    shadowColor: "rgba(0,0,0,0.08)",
+    shadowColor: "rgba(12,21,46,0.15)",
     shadowOpacity: 1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
   },
-  rangeTab: { flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  rangeTabActive: {
-    backgroundColor: colors.progress.line,
+  rangeTab: {
+    flex: 1,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rangeTabActiveShell: {
+    overflow: "hidden",
     shadowColor: colors.progress.line,
     shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  rangeTxt: { color: colors.textMuted, fontSize: 14, fontWeight: "600" },
-  rangeTxtActive: { color: "#FFFFFF", fontWeight: "700" },
-
-  // Metric list
-  metricWrap: { borderRadius: 16, overflow: "visible", marginBottom: spacing(2) },
-  metricItem: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    marginBottom: spacing(1),
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "rgba(0,0,0,0.07)",
-    shadowOpacity: 1,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
-  metricItemActive: { borderColor: colors.progress.activeBorder },
-  metricLeft: { flexDirection: "row", alignItems: "center" },
-  iconBubble: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.progress.iconBubble,
+  rangeTabGrad: {
+    width: "100%",
+    paddingVertical: 12,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
   },
-  iconBubbleActive: { backgroundColor: colors.progress.chipBg },
-  metricTxt: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.progress.line },
-
-  // Chart card
-  chartCard: {
+  rangeTabInactive: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing(1.5),
-    shadowColor: "rgba(0,0,0,0.06)",
+    paddingVertical: 12,
+    shadowColor: "rgba(12,21,46,0.06)",
     shadowOpacity: 1,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
-  chartHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing(1) },
+  rangeTxt: { color: colors.textMuted, fontSize: 14, fontWeight: "600" },
+  rangeTxtActive: { color: "#FFFFFF", fontWeight: "700" },
+
+  /* ---------- Metric list (glassy cards + icon bubbles) ---------- */
+  metricWrap: {
+    borderRadius: 16,
+    overflow: "visible",
+    marginBottom: spacing(2),
+  },
+
+  metricItemBase: {
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: spacing(1.25),
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metricItemActive: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E6ECF5",
+    shadowColor: "rgba(12,21,46,0.12)",
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  metricItemInactive: {
+    backgroundColor: "#F7F9FE",
+    borderWidth: 1,
+    borderColor: "#E9EEF7",
+    shadowColor: "rgba(12,21,46,0.06)",
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+
+  metricLeft: { flexDirection: "row", alignItems: "center" },
+
+  iconBubbleGrad: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  iconBubbleMuted: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    backgroundColor: "#EEF4FF",
+  },
+
+  metricTxt: { color: colors.textMuted, fontSize: 15, fontWeight: "600" },
+  metricTxtActive: { color: colors.text },
+
+  activeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2DD4BF", // bright mint dot
+    marginRight: 4,
+  },
+
+  /* ---------- Cards (chart + info) ---------- */
+  chartCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 0,
+    padding: spacing(1.5),
+    // stronger, softer shadow like the mock
+    shadowColor: "rgba(12,21,46,0.16)",
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
+    marginTop: spacing(1),
+  },
+  cardGrad: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 20,
+  },
+  infoCard: {
+    marginTop: spacing(2),
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 0,
+    padding: spacing(1.5),
+    shadowColor: "rgba(12,21,46,0.16)",
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
+    marginBottom: spacing(3),
+  },
+
+  /* --- Chart header / chip (unchanged except radii) --- */
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing(1),
+  },
   miniBubble: {
     width: 22,
     height: 22,
@@ -516,44 +699,86 @@ const p = StyleSheet.create({
     marginRight: 6,
   },
   chartTitle: { color: colors.text, fontWeight: "700", fontSize: 14 },
-  rangeChip: { backgroundColor: colors.progress.chipBg, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
-  rangeChipTxt: { fontSize: 11, fontWeight: "700", color: colors.progress.lineDeep },
+  rangeChip: {
+    backgroundColor: colors.progress.chipBg,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  rangeChipTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.progress.lineDeep,
+  },
 
-  // Stats row
-  statsRow: { flexDirection: "row", marginTop: spacing(2), gap: spacing(1) },
+  /* --- Stats trio --- */
+    statsRow: {
+      flexDirection: "row",
+      gap: spacing(1),
+    },
   statBox: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 0,
     paddingVertical: spacing(1),
     paddingHorizontal: spacing(1),
-    shadowColor: "rgba(0,0,0,0.03)",
+    shadowColor: "rgba(12,21,46,0.14)",
     shadowOpacity: 1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+    minHeight: 90,
   },
   statLbl: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
-  statVal: { color: colors.text, fontSize: 18, fontWeight: "700", marginTop: 4 },
+  statVal: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 4,
+  },
   statSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
 
-  // Info card
-  infoCard: {
-    marginTop: spacing(2),
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing(1.5),
-    shadowColor: "rgba(0,0,0,0.05)",
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
-    marginBottom: spacing(3),
+  // pill under Average
+  statExtraRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
   },
+  statPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.progress.chipBg,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statPillTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.progress.lineDeep,
+  },
+
+  /* ---------- Info text ---------- */
   infoTitle: { color: colors.text, fontWeight: "700", fontSize: 14 },
-  infoDesc: { color: colors.textMuted, fontSize: 12, lineHeight: 16, marginTop: 6 },
+  infoDesc: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
+  },
+
+    statsOuter: {
+    marginTop: spacing(2),
+    position: "relative",
+  },
+  statsBgGrad: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 24,
+  },
 });

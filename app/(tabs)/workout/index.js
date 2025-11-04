@@ -332,7 +332,7 @@ const s = StyleSheet.create({
   repeatBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: colors.success,
+    backgroundColor: colors.primary,
     borderRadius: 999,
   },
   repeatTxt: { color: "#fff", fontWeight: "800" },

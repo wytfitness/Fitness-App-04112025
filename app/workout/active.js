@@ -14,7 +14,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing } from "../../lib/theme";
-import { api } from "../../lib/api"; // guarded (optional)
+import { g } from "../../lib/global";
+import { api } from "../../lib/api";
 
 /* ---------------- helpers ---------------- */
 function parsePlan(p) {
@@ -26,9 +27,7 @@ function parsePlan(p) {
 }
 const pad = (n) => (n < 10 ? `0${n}` : String(n));
 
-const WEIGHT_OPTIONS = [
-  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90, 100,
-];
+const WEIGHT_OPTIONS = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90, 100];
 const REP_OPTIONS = Array.from({ length: 20 }, (_, i) => i + 1);
 
 /* ----------- Select (centered dialog) ----------- */
@@ -90,11 +89,7 @@ function Select({
                   >
                     <Text style={s.optionTxt}>{format(item)}</Text>
                     {selected ? (
-                      <Ionicons
-                        name="checkmark"
-                        size={18}
-                        color={colors.success}
-                      />
+                      <Ionicons name="checkmark" size={18} color={colors.success} />
                     ) : null}
                   </TouchableOpacity>
                 );
@@ -118,7 +113,7 @@ export default function Active() {
   const [sessionId, setSessionId] = useState(null);
   const [latestWeightKg, setLatestWeightKg] = useState(null);
 
-  // Expand the plan into concrete set rows
+  // expand plan -> rows
   const [setsState, setSetsState] = useState(() => {
     const rows = [];
     plan.forEach((p) => {
@@ -137,15 +132,15 @@ export default function Active() {
     return rows;
   });
 
-  // simple timer
+  // timer
   useEffect(() => {
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, []);
-  const mm = Math.floor(elapsed / 60),
-    ss = elapsed % 60;
+  const mm = Math.floor(elapsed / 60);
+  const ss = elapsed % 60;
 
-  // start a session
+  // start session
   useEffect(() => {
     (async () => {
       try {
@@ -159,16 +154,14 @@ export default function Active() {
     })();
   }, [name]);
 
-  // try to get the latest weight (for kcal estimate)
+  // latest weight
   useEffect(() => {
     (async () => {
       try {
         const w = await api.latestWeight?.();
         const kg = Number(w?.weight_kg ?? w?.value_kg);
         if (Number.isFinite(kg)) setLatestWeightKg(kg);
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
   }, []);
 
@@ -177,7 +170,7 @@ export default function Active() {
   };
 
   const logSet = async (row) => {
-    if (!sessionId) return; // guard
+    if (!sessionId) return;
     updateSet(row.key, { done: true });
     try {
       if (api.logSet) {
@@ -205,11 +198,7 @@ export default function Active() {
     });
   };
 
-  function estimateWorkoutKcal({
-    elapsedSec,
-    weightKg = 70,
-    intensity = "moderate",
-  }) {
+  function estimateWorkoutKcal({ elapsedSec, weightKg = 70, intensity = "moderate" }) {
     const MET = intensity === "vigorous" ? 6.0 : 3.5;
     const minutes = (elapsedSec || 0) / 60;
     return (MET * 3.5 * weightKg) / 200 * minutes; // kcal
@@ -221,7 +210,6 @@ export default function Active() {
       (v, s) => v + Number(s.weight_kg || 0) * Number(s.reps || 0),
       0
     );
-
     const weightKg = latestWeightKg ?? 70;
     const kcal = Math.round(
       estimateWorkoutKcal({ elapsedSec: elapsed, weightKg, intensity: "moderate" })
@@ -245,78 +233,144 @@ export default function Active() {
         sets: String(done.length),
         volume: String(Math.round(volume)),
         kcal: String(kcal),
-        // NEW: pass routine for “Save as Favorite”
         plan: encodeURIComponent(JSON.stringify(plan)),
       },
     });
   };
 
+  // progress values
+  const totalSets = setsState.length;
+  const doneSets = setsState.filter((x) => x.done).length;
+  const pct = totalSets ? Math.round((doneSets / totalSets) * 100) : 0;
+
   return (
-    <SafeAreaView style={s.screen} edges={["top"]}>
+    <SafeAreaView style={s.screen} edges={["top", "bottom"]}>
       {/* Top bar */}
-      <View style={s.topBar}>
+      <View style={[s.topBar, g.px2]}>
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
+
         <View style={{ flex: 1 }}>
-          <Text style={s.titleTop}>{name || "Untitled Workout"}</Text>
+          <Text style={g.h1}>{name || "Morning Workout"}</Text>
         </View>
-        <Text style={s.timer}>
-          {pad(mm)}:{pad(ss)}
-        </Text>
+
+        <View style={g.chip}>
+          <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+          <Text style={{ color: colors.text, fontWeight: "800" }}>
+            {pad(mm)}:{pad(ss)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Progress */}
+      <View style={[g.px2, s.progressWrap]}>
+        <View style={s.progressHead}>
+          <Text style={[g.muted, { fontWeight: "700" }]}>Progress</Text>
+          <Text style={[g.muted, { fontWeight: "800" }]}>
+            {doneSets}/{totalSets} sets
+          </Text>
+        </View>
+        <View style={s.progressTrack}>
+          <View style={[s.progressFill, { width: `${pct}%` }]} />
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         {plan.map((p) => {
           const total = Number(p.sets) || 0;
+          const doneForThis = setsState.filter(
+            (r) => r.exercise === p.name && r.done
+          ).length;
+
           return (
-            <View key={p.id} style={s.block}>
-              <View style={s.blockHead}>
-                <Text style={s.blockTitle}>{p.name}</Text>
-                <Text style={s.blockMeta}>{total} sets</Text>
+            <View
+              key={p.id}
+              style={[
+                g.card,
+                g.shadowLg,
+                { marginHorizontal: spacing(2), marginTop: spacing(1.25) },
+              ]}
+            >
+              {/* dark header */}
+              <View style={g.cardHeaderDark}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="barbell" size={16} color={colors.onHeaderDark} />
+                  <View>
+                    <Text style={{ color: colors.onHeaderDark, fontWeight: "800" }}>
+                      {p.name}
+                    </Text>
+                    <Text
+                      style={{
+                        color: colors.onHeaderDarkMuted,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {total} sets
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={s.headerBadge}>
+                  <Text style={s.headerBadgeTxt}>
+                    {doneForThis}/{total}
+                  </Text>
+                </View>
               </View>
 
-              {Array.from({ length: total }, (_, i) => {
-                const k = `${p.id}_${i + 1}`;
-                const row = setsState.find((r) => r.key === k);
-                return (
-                  <View key={k} style={s.setRow}>
-                    <Text style={s.setLabel}>Set {i + 1}</Text>
+              <View style={{ padding: 14 }}>
+                {Array.from({ length: total }, (_, i) => {
+                  const k = `${p.id}_${i + 1}`;
+                  const row = setsState.find((r) => r.key === k);
+                  const disabled = row?.done;
 
-                    <Select
-                      title="Select Weight"
-                      value={row?.weight_kg}
-                      onChange={(v) => updateSet(k, { weight_kg: v })}
-                      options={WEIGHT_OPTIONS}
-                      placeholder="kg"
-                      format={(v) => `${v} kg`}
-                      disabled={row?.done}
-                    />
+                  return (
+                    <View key={k} style={s.setRow}>
+                      <View style={s.setIndex}>
+                        <Text style={s.setIndexTxt}>{i + 1}</Text>
+                      </View>
 
-                    <Select
-                      title="Select Reps"
-                      value={row?.reps}
-                      onChange={(v) => updateSet(k, { reps: v })}
-                      options={REP_OPTIONS}
-                      placeholder="reps"
-                      format={(v) => `${v}`}
-                      disabled={row?.done}
-                    />
+                      <View style={{ flex: 1, gap: 6 }}>
+                        <Text style={s.smallLabel}>Weight</Text>
+                        <Select
+                          title="Select Weight"
+                          value={row?.weight_kg}
+                          onChange={(v) => updateSet(k, { weight_kg: v })}
+                          options={WEIGHT_OPTIONS}
+                          placeholder="kg"
+                          format={(v) => `${v} kg`}
+                          disabled={disabled}
+                        />
+                      </View>
 
-                    <TouchableOpacity
-                      onPress={() => logSet(row)}
-                      disabled={row?.done}
-                      style={[s.chkBtn, row?.done && s.chkDone]}
-                    >
-                      <Ionicons
-                        name={row?.done ? "checkmark" : "checkmark-outline"}
-                        size={18}
-                        color={row?.done ? colors.success : colors.textMuted}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                      <View style={{ width: 92, marginLeft: 8 }}>
+                        <Text style={s.smallLabel}>Reps</Text>
+                        <Select
+                          title="Select Reps"
+                          value={row?.reps}
+                          onChange={(v) => updateSet(k, { reps: v })}
+                          options={REP_OPTIONS}
+                          placeholder="reps"
+                          format={(v) => `${v}`}
+                          disabled={disabled}
+                        />
+                      </View>
+
+                      <TouchableOpacity
+                        onPress={() => logSet(row)}
+                        disabled={disabled}
+                        style={[s.chkBtn, disabled && s.chkDone]}
+                      >
+                        <Ionicons
+                          name={disabled ? "checkmark" : "checkmark-outline"}
+                          size={18}
+                          color={disabled ? colors.success : colors.textMuted}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           );
         })}
@@ -325,16 +379,13 @@ export default function Active() {
       {/* Bottom actions */}
       <View style={s.footer}>
         <View style={s.footerRow}>
-          <TouchableOpacity
-            onPress={addExercise}
-            style={s.addBtn}
-            disabled={!sessionId}
-          >
+          <TouchableOpacity onPress={addExercise} style={s.addBtn} disabled={!sessionId}>
             <Ionicons name="add" size={18} color={colors.text} />
             <Text style={s.addTxt}>Add Exercise</Text>
           </TouchableOpacity>
+
           <TouchableOpacity onPress={finish} style={s.finishBtn}>
-            <Text style={s.finishTxt}>Finish</Text>
+            <Text style={s.finishTxt}>Finish Workout</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -344,13 +395,18 @@ export default function Active() {
 
 /* ---------------- styles ---------------- */
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { 
+    flex: 1,
+    backgroundColor: colors.bg, 
+    paddingBottom: spacing(4) // or any value you want
+  },
+
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: spacing(2),
+    gap: 10,
     paddingTop: spacing(1),
+    marginBottom: 6,
   },
   iconBtn: {
     width: 36,
@@ -359,34 +415,74 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  titleTop: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  timer: { color: colors.textMuted, fontWeight: "800" },
 
-  block: {
-    marginHorizontal: spacing(2),
-    marginTop: spacing(1.25),
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 14,
+  /* Progress */
+  progressWrap: { marginTop: 4, marginBottom: 10 },
+  progressHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: "hidden",
   },
-  blockHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  blockTitle: { color: colors.text, fontWeight: "800", fontSize: 16 },
-  blockMeta: { color: colors.textMuted, fontWeight: "700" },
+  progressFill: { height: "100%", backgroundColor: colors.primary },
 
-  setRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
-  setLabel: { color: colors.textMuted, width: 46, fontWeight: "700" },
+  /* Exercise header badge */
+  headerBadge: {
+    height: 22,
+    minWidth: 38,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    backgroundColor: colors.overlayOnDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerBadgeTxt: {
+    color: colors.onHeaderDark,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  /* Set row */
+  setRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    marginTop: 12,
+  },
+  setIndex: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  setIndexTxt: { color: colors.text, fontWeight: "800", fontSize: 12 },
+
+  smallLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
 
   // Select trigger
   inputBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
+    height: 40,
+    borderRadius: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
@@ -394,6 +490,7 @@ const s = StyleSheet.create({
   inputBtnTxt: { color: colors.text, fontWeight: "700" },
   inputDisabled: { opacity: 0.6 },
 
+  // Check button
   chkBtn: {
     width: 40,
     height: 40,
@@ -403,9 +500,11 @@ const s = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    marginLeft: 8,
   },
-  chkDone: { backgroundColor: "#EAF7F0", borderColor: "#EAF7F0" },
+  chkDone: { backgroundColor: colors.successSoft, borderColor: colors.successSoft },
 
+  // Footer
   footer: {
     position: "absolute",
     left: 0,
