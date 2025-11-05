@@ -102,5 +102,5 @@ const s = StyleSheet.create({
   wrap: { flex: 1, padding: spacing(2), backgroundColor: colors.bg },
   title: { color: colors.text, fontSize: 26, fontWeight: "800", textAlign: "center" },
   sub: { color: colors.textMuted, textAlign: "center", marginBottom: spacing(2) },
-  footer: { color: colors.textMuted, textAlign: "center" },
+  footer: { color: colors.textMuted, textAlign: "center",paddingBottom:12 },
 });

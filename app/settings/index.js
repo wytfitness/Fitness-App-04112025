@@ -398,7 +398,7 @@ const s = StyleSheet.create({
     minWidth: 110,         // was 120
     paddingVertical: 9,    // was 10
     borderRadius: 10,
-    backgroundColor: colors.success,
+    backgroundColor: "#12D3C1",
   },
 
   editBtnText: {

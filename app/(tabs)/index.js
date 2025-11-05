@@ -1,7 +1,14 @@
 // app/(tabs)/index.js
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  Image, Modal, Pressable,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  Modal,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing, shadow } from "../../lib/theme";
@@ -19,18 +26,34 @@ import { supabase } from "../../lib/supabase";
 
 const nf = new Intl.NumberFormat();
 
+// Soft pastel backgrounds + bold accents for nutrition cards (kept if you use later)
+const MACRO_COLORS = {
+  calories: { bg: "#FFE7C2", accent: "#FF7A00" },
+  protein: { bg: "#EAF3FF", accent: "#0A66FF" },
+  carbs: { bg: "#D9F8EB", accent: "#12D3C1" },
+  fat: { bg: "#FFE1EA", accent: "#FF3B70" },
+};
+
 // helper to safely call optional API methods
 async function safeCall(fn) {
-  try { return await fn?.(); } catch (e) { console.warn("dashboard fetch:", e?.message || e); return undefined; }
+  try {
+    return await fn?.();
+  } catch (e) {
+    console.warn("dashboard fetch:", e?.message || e);
+    return undefined;
+  }
 }
 
-function utcTodayWindow() {
+function todayWindowLocal() {
   const now = new Date();
-  const start = new Date(Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0
-  ));
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0, 0, 0, 0
+  );
   const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  end.setDate(end.getDate() + 1);
   return { start, end };
 }
 
@@ -48,11 +71,17 @@ function overlapMinutesInWindow(row, { start, end }) {
 }
 
 /** ===== NEW helpers to count ongoing sessions & estimate calories ===== */
-function toMs(d) { return Date.parse(String(d)); }
+function toMs(d) {
+  return Date.parse(String(d));
+}
+
+
 
 function minutesOf(row, { allowOngoing = true } = {}) {
   const s = toMs(row?.started_at ?? row?.start_time ?? row?.start);
-  const e = toMs(row?.ended_at ?? row?.end_time ?? row?.completed_at ?? row?.date);
+  const e = toMs(
+    row?.ended_at ?? row?.end_time ?? row?.completed_at ?? row?.date
+  );
 
   // finished
   if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
@@ -61,7 +90,8 @@ function minutesOf(row, { allowOngoing = true } = {}) {
   // ongoing (no end yet)
   if (allowOngoing && Number.isFinite(s)) {
     const now = Date.now();
-    if (now > s) return Math.min(180, Math.max(1, Math.round((now - s) / 60000))); // clamp 3h
+    if (now > s)
+      return Math.min(180, Math.max(1, Math.round((now - s) / 60000))); // clamp 3h
   }
   // fallback to precomputed fields
   const raw = Number(row?.duration_min ?? row?.duration ?? 0);
@@ -73,7 +103,7 @@ function caloriesOf(row, latestWeightKg = 70) {
   if (Number.isFinite(v) && v > 0) return Math.round(v);
   const mins = minutesOf(row, { allowOngoing: true });
   const MET = 6; // moderate estimate
-  return Math.round(MET * 3.5 * latestWeightKg / 200 * mins);
+  return Math.round((MET * 3.5 * latestWeightKg) / 200 * mins);
 }
 
 // Weight-based macro goals (fallbacks if no weight available)
@@ -107,32 +137,46 @@ function deriveMacroGoals({ cal, macroPct, weightKg }) {
   };
 }
 
-
 /** ===================================================================== */
 
 export default function Dashboard() {
   const router = useRouter();
-  const PADX = spacing(0.5);
+  const PADX = spacing(2); // more padding to match Figma side margins
 
   // totals from meals (FOOD)
   const [totals, setTotals] = useState({ kcal: 0, p: 0, c: 0, f: 0 });
 
   // goals
   const [goals, setGoals] = useState({
-    cal: 2200, waterMl: 2500, activeMin: 60, targetWeightKg: 72,
+    cal: 2200,
+    waterMl: 2500,
+    activeMin: 60,
+    targetWeightKg: 72,
   });
   const [macroPct, setMacroPct] = useState({ c: 40, p: 30, f: 30 });
 
   // weekly summary (last 7 days)
-  const [weekly, setWeekly] = useState({ workouts: 0, calories: 0, active_min: 0 });
+  const [weekly, setWeekly] = useState({
+    workouts: 0,
+    calories: 0,
+    active_min: 0,
+  });
   const formatK = (n) => {
     const v = Math.round(Number(n || 0));
-    return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(v);
+    return v >= 1000
+      ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
+      : String(v);
   };
 
   // weight & workout
   const [weight, setWeight] = useState({ valueKg: null, deltaKg: 0 });
-  const [workout, setWorkout] = useState({ title: "—", durationMin: 0, calories: 0, dateLabel: "", completed: true });
+  const [workout, setWorkout] = useState({
+    title: "—",
+    durationMin: 0,
+    calories: 0,
+    dateLabel: "",
+    completed: true,
+  });
 
   // 🔹 Exercise kcal (today) — used to compute Remaining from Net = Food - Exercise
   const [exerciseKcal, setExerciseKcal] = useState(0);
@@ -176,7 +220,11 @@ export default function Dashboard() {
         waterMl: (g.water_cups ?? 12) * 250,
         targetWeightKg: g.weight ?? prev.targetWeightKg,
       }));
-      setMacroPct({ c: g.carbs_pct ?? 40, p: g.protein_pct ?? 30, f: g.fat_pct ?? 30 });
+      setMacroPct({
+        c: g.carbs_pct ?? 40,
+        p: g.protein_pct ?? 30,
+        f: g.fat_pct ?? 30,
+      });
     } else {
       const profile = await safeCall(() => api.profile?.());
       if (profile) {
@@ -197,11 +245,12 @@ export default function Dashboard() {
       const tgt = Number(goals.targetWeightKg);
       setWeight({
         valueKg: Number.isFinite(current) ? current : null,
-        deltaKg: Number.isFinite(current) && Number.isFinite(tgt) ? current - tgt : 0,
+        deltaKg:
+          Number.isFinite(current) && Number.isFinite(tgt) ? current - tgt : 0,
       });
     }
 
-    // 4) last workout (for the "Last Workout" card)
+    // 4) last workout (for the "Last Workout" data)
     let lw = await safeCall(() => api.lastWorkout?.());
     if (lw && lw.workout) lw = lw.workout;
     if (!lw) {
@@ -210,68 +259,90 @@ export default function Dashboard() {
     }
     if (!lw) {
       const list = (await safeCall(() => api.workouts?.(25))) || {};
-      const arr = list?.workouts ?? list?.items ?? (Array.isArray(list) ? list : []);
+      const arr =
+        list?.workouts ?? list?.items ?? (Array.isArray(list) ? list : []);
       lw = pickLatestWorkout(arr);
     }
     if (!lw) lw = await fetchLastWorkoutDirect();
     if (lw) {
       setWorkout(normalizeWorkout(lw));
     } else {
-      setWorkout({ title: "—", durationMin: 0, calories: 0, dateLabel: "", completed: false });
+      setWorkout({
+        title: "—",
+        durationMin: 0,
+        calories: 0,
+        dateLabel: "",
+        completed: false,
+      });
     }
-
-    /** ===== 4b) Today’s workouts (UTC window, no cross-day overcount) ===== */
+    /** ===== 4b) Today’s workouts (LOCAL today, only workouts started today) ===== */
     try {
-      const win = utcTodayWindow();
+      const { start, end } = todayWindowLocal();
+      const dayStartMs = start.getTime();
+      const dayEndMs   = end.getTime();
 
-      // If server provides kcal for today, trust it.
-      const ex = (await safeCall(() => api.exerciseToday?.())) || null;
-      let kcal = Number.isFinite(Number(ex?.kcal)) ? Math.max(0, Math.round(Number(ex.kcal))) : 0;
-
-      // Compute today's minutes by overlap only.
       const wks = (await safeCall(() => api.workouts?.(120))) || {};
-      const arr = wks?.workouts ?? wks?.items ?? (Array.isArray(wks) ? wks : []);
-      const latestW = Number(weight?.valueKg ?? goals?.targetWeightKg ?? 70) || 70;
+      const arr =
+        wks?.workouts ?? wks?.items ?? (Array.isArray(wks) ? wks : []);
+
+      const latestW =
+        Number(weight?.valueKg ?? goals?.targetWeightKg ?? 70) || 70;
 
       let minsToday = 0;
+      let kcalFromWorkouts = 0;
 
       for (const r of arr) {
-        const minsInToday = overlapMinutesInWindow(r, win);
-        if (!minsInToday) continue;
+        // only workouts that STARTED today (local)
+        const s = toMs(
+          r.started_at ??
+          r.start_time ??
+          r.date ??
+          r.completed_at ??
+          r.ended_at
+        );
+        if (!Number.isFinite(s) || s < dayStartMs || s >= dayEndMs) continue;
 
-        minsToday += minsInToday;
+        // minutes for THIS workout (clamp to 3h so bad timestamps can't explode)
+        const mins = Math.min(180, minutesOf(r, { allowOngoing: true }));
+        if (!mins) continue;
 
-        // If server didn't send kcal, apportion recorded kcal by overlap, else estimate for overlap.
-        if (!ex) {
-          const recorded = Number(r?.calories_burned ?? r?.calories);
-          if (Number.isFinite(recorded) && recorded > 0) {
-            const totalMins = minutesOf(r, { allowOngoing: true }) || minsInToday;
-            const portion = totalMins > 0 ? minsInToday / totalMins : 1;
-            kcal += Math.round(recorded * portion);
-          } else {
-            const MET = 6;
-            kcal += Math.round((MET * 3.5 * latestW / 200) * minsInToday);
-          }
+        minsToday += mins;
+
+        // use recorded calories if they look sane, else estimate
+        let c = Number(r.calories_burned ?? r.calories);
+        if (!Number.isFinite(c) || c <= 0 || c > 3000) {
+          const MET = 6;
+          c = Math.round((MET * 3.5 * latestW / 200) * mins);
         }
+        kcalFromWorkouts += c;
       }
 
-      setExerciseKcal(kcal);
+      // clamp daily total as a final safety (no one burns 200k kcal in a day)
+      const finalKcal = Math.min(8000, Math.max(0, Math.round(kcalFromWorkouts)));
 
-      // Streak logic unchanged
+      setExerciseKcal(finalKcal);
+
+      // === streak logic (reuse the same arr, you had this part already) ===
       const daysWithWorkout = new Set(
         arr
           .map((r) =>
             String(
-              r.completed_at || r.ended_at || r.recorded_at ||
-              r.started_at   || r.date      || r.start_time || ""
+              r.completed_at ||
+                r.ended_at ||
+                r.recorded_at ||
+                r.started_at ||
+                r.date ||
+                r.start_time ||
+                ""
             ).slice(0, 10)
           )
           .filter(Boolean)
       );
+
       let streak = 0;
       for (let i = 0; i < 90; i++) {
         const d = new Date();
-        d.setUTCDate(d.getUTCDate() - i);
+        d.setDate(d.getDate() - i);
         const key = d.toISOString().slice(0, 10);
         if (daysWithWorkout.has(key)) streak++;
         else break;
@@ -284,11 +355,15 @@ export default function Dashboard() {
       setActive?.({ minsToday: 0, streak: 0 });
     }
 
+
+
+
     /** ===== 4c) Weekly Summary (server preferred; fallback to client compute) ===== */
     let ws = await safeCall(() => api.getWeeklySummary?.());
     if (!ws) {
       const wks = (await safeCall(() => api.workouts?.(60))) || {};
-      const arr = wks?.workouts ?? wks?.items ?? (Array.isArray(wks) ? wks : []);
+      const arr =
+        wks?.workouts ?? wks?.items ?? (Array.isArray(wks) ? wks : []);
       const now = new Date();
       const cutoff = new Date(now);
       cutoff.setUTCDate(cutoff.getUTCDate() - 6); // last 7 days
@@ -296,11 +371,26 @@ export default function Dashboard() {
       const stats = arr.reduce(
         (acc, r) => {
           // use end time if present; else use start (so ongoing today counts)
-          const t = toMs(r.ended_at ?? r.completed_at ?? r.date ?? r.started_at ?? r.start_time);
-          if (Number.isFinite(t) && t >= cutoff.getTime() && t <= now.getTime()) {
+          const t = toMs(
+            r.ended_at ??
+              r.completed_at ??
+              r.date ??
+              r.started_at ??
+              r.start_time
+          );
+          if (
+            Number.isFinite(t) &&
+            t >= cutoff.getTime() &&
+            t <= now.getTime()
+          ) {
             acc.workouts += 1;
             acc.active_min += minutesOf(r, { allowOngoing: true });
-            acc.calories   += caloriesOf(r, Number(weight?.valueKg ?? goals?.targetWeightKg ?? 70) || 70);
+            acc.calories += caloriesOf(
+              r,
+              Number(
+                weight?.valueKg ?? goals?.targetWeightKg ?? 70
+              ) || 70
+            );
           }
           return acc;
         },
@@ -317,55 +407,90 @@ export default function Dashboard() {
 
     // 5) daily activity (optional)
     const st = await safeCall(() => api.stepsToday?.());
-    if (st) setSteps({ value: st.steps ?? st.value ?? steps.value, goal: st.goal ?? steps.goal });
+    if (st)
+      setSteps({
+        value: st.steps ?? st.value ?? steps.value,
+        goal: st.goal ?? steps.goal,
+      });
 
     const wt = await safeCall(() => api.waterToday?.());
     if (wt) setWater({ ml: wt.ml ?? wt.value_ml ?? water.ml });
 
-    // 6) recommendations
+    // 6) recommendations (kept for later if you add the cards back)
     const rw = (await safeCall(() => api.recommendedWorkouts?.())) || [];
     setRecs(
       Array.isArray(rw) && rw.length
         ? rw.slice(0, 6)
         : [
-            { id: "yoga", title: "Morning Yoga", durationMin: 30, kcal: 180, badge: "New", imageUrl: null },
-            { id: "hiit", title: "HIIT Cardio", durationMin: 20, kcal: 280, badge: "New", imageUrl: null },
+            {
+              id: "yoga",
+              title: "Morning Yoga",
+              durationMin: 30,
+              kcal: 180,
+              badge: "New",
+              imageUrl: null,
+            },
+            {
+              id: "hiit",
+              title: "HIIT Cardio",
+              durationMin: 20,
+              kcal: 280,
+              badge: "New",
+              imageUrl: null,
+            },
           ]
     );
   }, [goals.targetWeightKg, steps.goal, steps.value, water.ml, weight?.valueKg]);
 
-
-  useFocusEffect(useCallback(() => { loadDashboard(); }, [loadDashboard]));
-
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
 
   // derived values for goals/progress
-  const weightForMacros = Number(
-    goals?.targetWeightKg ?? weight?.valueKg
-  );
+  const weightForMacros = Number(goals?.targetWeightKg ?? weight?.valueKg);
 
   const { p: pGoal, c: cGoal, f: fGoal } = deriveMacroGoals({
     cal: goals.cal,
-    macroPct,          // still passed in, but weight-based branch is used
+    macroPct,
     weightKg: weightForMacros,
   });
 
   const clampPct = (v) => Math.max(0, Math.min(100, Math.round(v)));
   const proteinPct = clampPct((totals.p / pGoal) * 100 || 0);
-  const carbsPct   = clampPct((totals.c / cGoal) * 100 || 0);
-  const fatsPct    = clampPct((totals.f / fGoal) * 100 || 0);
+  const carbsPct = clampPct((totals.c / cGoal) * 100 || 0);
+  const fatsPct = clampPct((totals.f / fGoal) * 100 || 0);
 
   // Keep progress bar using FOOD (to match your UI), but compute Remaining from NET
-  const kcalPct    = Math.max(0, Math.min(1, goals.cal ? totals.kcal / goals.cal : 0)); // FOOD progress
-  const netKcal    = Math.max(0, totals.kcal - exerciseKcal);                            // NET = Food - Exercise
-  const remaining  = Math.round(goals.cal - netKcal);                                    // Remaining from NET
+  const kcalPct = Math.max(
+    0,
+    Math.min(1, goals.cal ? totals.kcal / goals.cal : 0)
+  ); // FOOD progress
+  const netKcal = Math.max(0, totals.kcal - exerciseKcal); // NET = Food - Exercise
+  const remaining = Math.round(goals.cal - netKcal); // Remaining from NET
 
-  const stepsPct  = Math.max(0, Math.min(1, steps.goal ? steps.value / steps.goal : 0));
-  const waterPct  = Math.max(0, Math.min(1, goals.waterMl ? water.ml / goals.waterMl : 0));
-  const weightPct = Math.max(0, Math.min(1, goals.targetWeightKg && weight.valueKg != null ? (weight.valueKg / goals.targetWeightKg) : 0));
+  const stepsPct = Math.max(
+    0,
+    Math.min(1, steps.goal ? steps.value / steps.goal : 0)
+  );
+  const waterPct = Math.max(
+    0,
+    Math.min(1, goals.waterMl ? water.ml / goals.waterMl : 0)
+  );
+  const weightPct = Math.max(
+    0,
+    Math.min(
+      1,
+      goals.targetWeightKg && weight.valueKg != null
+        ? weight.valueKg / goals.targetWeightKg
+        : 0
+    )
+  );
 
   const [wkTab, setWkTab] = useState("duration");
 
-  // ── Drawer
+  // ── Drawer (not shown in this Figma screen, but helpers kept)
   const DRAWER_WIDTH = Math.min(300, Dimensions.get("window").width * 0.6);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -401,11 +526,46 @@ export default function Dashboard() {
     yoga: {
       name: "Morning Yoga",
       plan: [
-        { id: "cat_cow",          name: "Cat–Cow",              sets: 2, reps: 10, weight_kg: null, group: "Mobility" },
-        { id: "downward_dog",     name: "Downward Dog (hold)",  sets: 2, reps: 30, weight_kg: null, group: "Mobility" },
-        { id: "child_pose",       name: "Child’s Pose (hold)",  sets: 2, reps: 30, weight_kg: null, group: "Stretch" },
-        { id: "sun_salutation_a", name: "Sun Salutation A",     sets: 2, reps: 10, weight_kg: null, group: "Flow" },
-        { id: "seated_forward",   name: "Seated Forward Fold",  sets: 2, reps: 30, weight_kg: null, group: "Stretch" },
+        {
+          id: "cat_cow",
+          name: "Cat–Cow",
+          sets: 2,
+          reps: 10,
+          weight_kg: null,
+          group: "Mobility",
+        },
+        {
+          id: "downward_dog",
+          name: "Downward Dog (hold)",
+          sets: 2,
+          reps: 30,
+          weight_kg: null,
+          group: "Mobility",
+        },
+        {
+          id: "child_pose",
+          name: "Child’s Pose (hold)",
+          sets: 2,
+          reps: 30,
+          weight_kg: null,
+          group: "Stretch",
+        },
+        {
+          id: "sun_salutation_a",
+          name: "Sun Salutation A",
+          sets: 2,
+          reps: 10,
+          weight_kg: null,
+          group: "Flow",
+        },
+        {
+          id: "seated_forward",
+          name: "Seated Forward Fold",
+          sets: 2,
+          reps: 30,
+          weight_kg: null,
+          group: "Stretch",
+        },
       ],
     },
   };
@@ -433,23 +593,32 @@ export default function Dashboard() {
   function prettyDate(d) {
     if (!(d instanceof Date) || isNaN(d.getTime())) return "";
     const today = new Date();
-    const yest  = new Date(); yest.setDate(today.getDate() - 1);
+    const yest = new Date();
+    yest.setDate(today.getDate() - 1);
 
     const same = (A, B) =>
       A.getFullYear() === B.getFullYear() &&
       A.getMonth() === B.getMonth() &&
       A.getDate() === B.getDate();
 
-    const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const timeStr = d.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
 
     if (same(d, today)) return `Today • ${timeStr}`;
-    if (same(d, yest))  return `Yesterday • ${timeStr}`;
-    const dateStr = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    if (same(d, yest)) return `Yesterday • ${timeStr}`;
+    const dateStr = d.toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
     return `${dateStr} • ${timeStr}`;
   }
 
   function labelFromWorkout(w) {
-    const raw = typeof w?.date_label === "string" ? w.date_label.trim() : "";
+    const raw =
+      typeof w?.date_label === "string" ? w.date_label.trim() : "";
     if (raw) {
       const lower = raw.toLowerCase();
       if (lower === "today" || lower === "yesterday") return cap(lower);
@@ -459,16 +628,26 @@ export default function Dashboard() {
       }
       return raw;
     }
-    const iso = w?.completed_at ?? w?.recorded_at ?? w?.ended_at ?? w?.started_at ?? w?.start_time ?? w?.date;
+    const iso =
+      w?.completed_at ??
+      w?.recorded_at ??
+      w?.ended_at ??
+      w?.started_at ??
+      w?.start_time ??
+      w?.date;
     if (!iso) return "";
     return prettyDate(new Date(iso));
   }
 
   function minutesFromWorkout(w) {
-    if (w?.duration_min != null) return Math.max(0, Math.round(Number(w.duration_min)));
-    if (w?.duration != null && Number(w.duration) < 1000) return Math.max(0, Math.round(Number(w.duration)));
+    if (w?.duration_min != null)
+      return Math.max(0, Math.round(Number(w.duration_min)));
+    if (w?.duration != null && Number(w.duration) < 1000)
+      return Math.max(0, Math.round(Number(w.duration)));
     const start = Date.parse(w?.started_at ?? w?.start_time ?? w?.start);
-    const end   = Date.parse(w?.completed_at ?? w?.ended_at ?? w?.end_time ?? w?.end);
+    const end = Date.parse(
+      w?.completed_at ?? w?.ended_at ?? w?.end_time ?? w?.end
+    );
     if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
       return Math.max(0, Math.round((end - start) / 60000));
     }
@@ -476,12 +655,21 @@ export default function Dashboard() {
   }
 
   function caloriesFromWorkout(w) {
-    return Math.max(0, Math.round(Number(w?.calories ?? w?.calories_burned ?? w?.kcal ?? 0)));
+    return Math.max(
+      0,
+      Math.round(Number(w?.calories ?? w?.calories_burned ?? w?.kcal ?? 0))
+    );
   }
 
   function tsOfWorkout(w) {
-    const d = w?.completed_at || w?.ended_at || w?.end_time ||
-              w?.recorded_at || w?.started_at || w?.start_time || w?.date;
+    const d =
+      w?.completed_at ||
+      w?.ended_at ||
+      w?.end_time ||
+      w?.recorded_at ||
+      w?.started_at ||
+      w?.start_time ||
+      w?.date;
     const t = Date.parse(d);
     return Number.isFinite(t) ? t : 0;
   }
@@ -495,7 +683,9 @@ export default function Dashboard() {
       durationMin: minutesFromWorkout(w),
       calories: caloriesFromWorkout(w),
       dateLabel: labelFromWorkout(w),
-      completed: Boolean(w?.completed || w?.completed_at || w?.ended_at || w?.end_time),
+      completed: Boolean(
+        w?.completed || w?.completed_at || w?.ended_at || w?.end_time
+      ),
     };
   }
   async function fetchLastWorkoutDirect() {
@@ -503,21 +693,32 @@ export default function Dashboard() {
       {
         table: "workout_sessions",
         orderBy: ["ended_at", "completed_at", "recorded_at", "started_at"],
-        select: "id,name,calories_burned,calories,started_at,start_time,ended_at,end_time,completed_at,recorded_at,title,date,duration,duration_min",
+        select:
+          "id,name,calories_burned,calories,started_at,start_time,ended_at,end_time,completed_at,recorded_at,title,date,duration,duration_min",
       },
       {
         table: "workouts",
         orderBy: ["ended_at", "completed_at", "recorded_at", "started_at"],
-        select: "id,name,calories_burned,calories,started_at,start_time,ended_at,end_time,completed_at,recorded_at,title,date,duration,duration_min",
+        select:
+          "id,name,calories_burned,calories,started_at,start_time,ended_at,end_time,completed_at,recorded_at,title,date,duration,duration_min",
       },
     ];
     for (const c of candidates) {
       try {
         for (const col of c.orderBy) {
-          const tryOrder = await supabase.from(c.table).select(c.select).order(col, { ascending:false }).limit(1);
+          const tryOrder = await supabase
+            .from(c.table)
+            .select(c.select)
+            .order(col, { ascending: false })
+            .limit(1);
           if (!tryOrder.error && tryOrder.data?.length) {
-            const batch = await supabase.from(c.table).select(c.select).order(col, { ascending:false }).limit(10);
-            if (!batch.error && batch.data?.length) return pickLatestWorkout(batch.data);
+            const batch = await supabase
+              .from(c.table)
+              .select(c.select)
+              .order(col, { ascending: false })
+              .limit(10);
+            if (!batch.error && batch.data?.length)
+              return pickLatestWorkout(batch.data);
             break;
           }
         }
@@ -528,16 +729,41 @@ export default function Dashboard() {
 
   return (
     <SafeAreaView style={s.screen}>
-      <ScrollView contentContainerStyle={[s.container, { paddingHorizontal: PADX }]} showsVerticalScrollIndicator={false}>
-        {/* TOP BAR */}
-        <View style={[s.topBar, { paddingTop: spacing(2.5) }]}>
-          <TouchableOpacity onPress={() => router.push("/settings")} style={s.iconBtn}>
-            <Ionicons name="person-circle-outline" size={26} color={colors.text} />
-          </TouchableOpacity>
+      <ScrollView
+        contentContainerStyle={[s.container, { paddingHorizontal: PADX }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HEADER */}
+        <View style={s.headerRow}>
+          <View>
+            <Text style={s.headerTitle}>Dashboard</Text>
+            <Text style={s.headerSubtitle}>
+              Track your fitness journey
+            </Text>
+          </View>
+          <View style={s.headerIcons}>
+            <TouchableOpacity style={s.headerIconBtn}>
+              <Ionicons
+                name="notifications-outline"
+                size={20}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.headerIconBtn}
+              onPress={() => router.push("/settings")}
+            >
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Compact "edit goals" pill */}
-        <View style={s.topActions}>
+        {/* EDIT GOAL TEXT (small, right aligned) */}
+        <View style={s.editRow}>
           <Pressable
             onPress={() => router.push("/settings/edit-goals")}
             android_ripple={{ color: "#e5e7eb", borderless: false }}
@@ -546,207 +772,320 @@ export default function Dashboard() {
           </Pressable>
         </View>
 
-        {/* ROW: Workout + Nutrition */}
-        <View style={s.tileContent}>
-          <Text style={s.tileOver}>NUTRITION</Text>
-
-          <View style={s.macrosGrid}>
-            {/* Calories */}
-            {/* Calories */}
-            <View style={[s.smallCard, shadow]}>
-              <Text style={s.smallLabel}>Calories</Text>
-              <View style={s.inline}>
-                <Text style={s.smallValue}>{nf.format(Math.round(totals.kcal))}</Text>
-                <Text style={s.smallUnit}>kcal</Text>
+        {/* TOP STATS: CALORIES + STEPS */}
+        <View style={s.topStatsRow}>
+          <Card style={[s.statCard, shadow]}>
+            <View style={s.statHeader}>
+              <Text style={s.statLabel}>Calories</Text>
+              <View
+                style={[
+                  s.statIconWrap,
+                  { backgroundColor: colors.warningSoft },
+                ]}
+              >
+                <Ionicons
+                  name="flame-outline"
+                  size={18}
+                  color={colors.warning}
+                />
               </View>
-              <View style={s.smallIconBadge}>
-                <Ionicons name="flame-outline" size={18} color={colors.orange} />
-              </View>
-
-              {/* / goal footer */}
-              <Text style={s.smallGoal}>/ {nf.format(Math.round(goals.cal))} kcal</Text>
             </View>
-
-            {/* Protein (dark) */}
-            <View style={[s.smallCard, s.smallCardDark, shadow]}>
-              <Text style={[s.smallLabel, { color: colors.onHeaderDarkMuted }]}>Protein</Text>
-              <View style={s.inline}>
-                <Text style={[s.smallValue, { color: colors.onHeaderDark }]}>{Math.round(totals.p)}</Text>
-                <Text style={[s.smallUnit, { color: colors.onHeaderDarkMuted }]}>g</Text>
-              </View>
-              <View style={[s.smallIconBadge, { backgroundColor: colors.overlayOnDark }]}>
-                <Ionicons name="egg-outline" size={18} color={colors.onHeaderDarkMuted} />
-              </View>
-
-              {/* / goal footer on dark */}
-              <Text style={[s.smallGoal, s.smallGoalOnDark]}>/ {nf.format(Math.round(pGoal))} g</Text>
+            <View style={s.statValueRow}>
+              <Text style={s.statNumber}>
+                {nf.format(Math.max(0, Math.round(exerciseKcal)))}
+              </Text>
+              <Text style={s.statSuffix}>kcal</Text>
             </View>
+            <Text style={s.statHint}>kCal burnt</Text>
+          </Card>
 
-            {/* Carbs (blue) */}
-            <View style={[s.smallCard, s.smallCardBlue, shadow]}>
-              <Text style={[s.smallLabel, { color: colors.onInfo }]}>Carbs</Text>
-              <View style={s.inline}>
-                <Text style={[s.smallValue, { color: colors.onInfo }]}>{Math.round(totals.c)}</Text>
-                <Text style={[s.smallUnit, { color: colors.onInfo }]}>g</Text>
+          <Card style={[s.statCard, shadow]}>
+            <View style={s.statHeader}>
+              <Text style={s.statLabel}>Steps</Text>
+              <View
+                style={[
+                  s.statIconWrap,
+                  { backgroundColor: colors.infoSoft },
+                ]}
+              >
+                <Ionicons
+                  name="walk-outline"
+                  size={18}
+                  color={colors.info}
+                />
               </View>
-              <View style={[s.smallIconBadge, { backgroundColor: colors.overlayOnDark }]}>
-                <Ionicons name="leaf-outline" size={18} color={colors.onInfo} />
-              </View>
-
-              {/* / goal footer on colored bg */}
-              <Text style={[s.smallGoal, s.smallGoalOnInfo]}>/ {nf.format(Math.round(cGoal))} g</Text>
             </View>
-
-            {/* Fat */}
-            <View style={[s.smallCard, shadow]}>
-              <Text style={s.smallLabel}>Fat</Text>
-              <View style={s.inline}>
-                <Text style={s.smallValue}>{Math.round(totals.f)}</Text>
-                <Text style={s.smallUnit}>g</Text>
-              </View>
-              <View style={s.smallIconBadge}>
-                <Ionicons name="pizza-outline" size={18} color={colors.orange} />
-              </View>
-
-              {/* / goal footer */}
-              <Text style={s.smallGoal}>/ {nf.format(Math.round(fGoal))} g</Text>
+            <View style={s.statValueRow}>
+              <Text style={s.statNumber}>
+                {formatK(Math.max(0, Math.round(steps.value)))}
+              </Text>
+              <Text style={s.statSuffix}>k</Text>
             </View>
-          </View>
+            <Text style={s.statHint}>steps today</Text>
+          </Card>
         </View>
 
+        {/* CALENDAR CARD (Nov 04–10, W 07 highlighted like Figma) */}
+        <Card style={[s.calendarCard, shadow]}>
+          <View style={s.rowBetween}>
+            <Text style={s.calendarTitle}>November 2024</Text>
+            <View style={s.calendarNav}>
+              <Ionicons
+                name="chevron-back-outline"
+                size={18}
+                color={colors.textMuted}
+              />
+              <Ionicons
+                name="chevron-forward-outline"
+                size={18}
+                color={colors.textMuted}
+              />
+            </View>
+          </View>
 
-        {/* DAILY ACTIVITY */}
-        <Card style={[s.block, shadow, { padding: 20, marginTop: spacing(5) }]}>
+          <View style={s.calendarWeekRow}>
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
+              <Text key={`${d}-${idx}`} style={s.calendarWeekLabel}>
+                {d}
+              </Text>
+            ))}
+          </View>
+
+          <View style={s.calendarDaysRow}>
+            {[4, 5, 6, 7, 8, 9, 10].map((d) => {
+              const isActive = d === 7;
+              return (
+                <View
+                  key={d}
+                  style={[s.calendarDay, isActive && s.calendarDayActive]}
+                >
+                  <Text
+                    style={[
+                      s.calendarDayText,
+                      isActive && s.calendarDayTextActive,
+                    ]}
+                  >
+                    {String(d).padStart(2, "0")}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </Card>
+
+        {/* NUTRITION GOALS: BIG RING + MACRO BREAKDOWN */}
+        <Card style={[s.nutritionCard, shadow]}>
+          <Text style={s.sectionTitle}>Nutrition Goals</Text>
+          <View style={s.nutritionTopRow}>
+            <CalorieRing
+              pct={kcalPct}
+              total={Math.round(totals.kcal)}
+              goal={Math.round(goals.cal)}
+            />
+          </View>
+
+          <View style={s.macroList}>
+            <MacroRow
+              label="Protein"
+              color="#FF2D92"
+              consumed={Math.round(totals.p)}
+              goal={Math.round(pGoal)}
+              pct={proteinPct}
+              unit="g"
+            />
+            <MacroRow
+              label="Fats"
+              color="#2563EB"
+              consumed={Math.round(totals.f)}
+              goal={Math.round(fGoal)}
+              pct={fatsPct}
+              unit="g"
+            />
+            <MacroRow
+              label="Carbs"
+              color="#F59E0B"
+              consumed={Math.round(totals.c)}
+              goal={Math.round(cGoal)}
+              pct={carbsPct}
+              unit="g"
+            />
+          </View>
+        </Card>
+
+        {/* DAILY ACTIVITY – Steps / Water / Weight (like old design) */}
+        <Card style={[s.activityCard, shadow]}>
           <View style={s.rowBetween}>
             <Text style={s.sectionTitle}>Daily Activity</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </View>
 
           <View style={s.activityRow}>
-            <ActivityRing pct={stepsPct} color={colors.info} icon="footsteps-outline" value={nf.format(steps.value)} label="Steps" />
-            <ActivityRing pct={waterPct} color={colors.success} icon="water-outline" value={`${nf.format(water.ml)}ml`} label="Water" />
+            <ActivityRing
+              pct={stepsPct}
+              color={colors.info}
+              icon="footsteps-outline"
+              value={nf.format(steps.value)}
+              label="Steps"
+            />
+
+            <ActivityRing
+              pct={waterPct}
+              color={colors.success}
+              icon="water-outline"
+              value={`${nf.format(water.ml)}ml`}
+              label="Water"
+            />
+
             <ActivityRing
               pct={weightPct}
               color={colors.purple}
               icon="scale-outline"
-              value={weight.valueKg != null ? `${weight.valueKg.toFixed(1)}kg` : "— kg"}
+              value={
+                weight.valueKg != null
+                  ? `${weight.valueKg.toFixed(1)}kg`
+                  : "— kg"
+              }
               label="Weight"
             />
           </View>
         </Card>
 
-        {/* RECOMMENDED WORKOUTS */}
-        <View style={[s.rowBetween, { marginTop: spacing(3), paddingBottom: spacing(1.5) }]}>
-          <Text style={s.sectionTitle}>Recommended Workouts</Text>
-          <TouchableOpacity onPress={() => router.push("/workout/recommended")}>
-            <Text style={s.link}>View All ›</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 2, paddingBottom: spacing(0.5) }}>
-          {recs.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              activeOpacity={0.9}
-              style={[s.recCard, shadow]}
-              onPress={() => startRecommended(r)}
-            >
-              <View style={s.recImageWrap}>
-                <Image source={imgFor(r)} style={s.recImage} />
-                {r.badge ? (
-                  <View style={s.newBadge}><Text style={s.newBadgeTxt}>{r.badge}</Text></View>
-                ) : null}
-              </View>
-              <Text style={s.recTitle} numberOfLines={1}>{r.title}</Text>
-              <View style={s.recMeta}>
-                <Ionicons name="time-outline" size={14} color={colors.textMuted} />
-                <Text style={s.recMetaTxt}>{r.durationMin} min</Text>
-                <Ionicons name="flame-outline" size={14} color={colors.textMuted} />
-                <Text style={s.recMetaTxt}>{r.kcal} kcal</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* QUICK ACTIONS */}
-        <View style={[s.rowBetween, { marginTop: spacing(4) }]}>
-          <Text style={s.sectionTitle}>Quick Actions</Text>
-        </View>
-        <View style={s.quickRow}>
-          <QuickPill label="Log Food"  icon="nutrition-outline"  bg={colors.warningSoft} onPress={() => router.push("/(models)/add-food")} />
-          <QuickPill label="Add Water" icon="water-outline"      bg={colors.warningSoft} onPress={() => router.push("/(models)/add-water")} />
-          <QuickPill label="Workout"   icon="barbell-outline"     bg={colors.warningSoft} onPress={() => router.push("/workout/select-routine")} />
-          <QuickPill label="Sleep"     icon="moon-outline"        bg={colors.warningSoft} onPress={() => {}} />
-        </View>
-
-        {/* LAST WORKOUT */}
-        <Card style={[s.block, { padding: 14, marginTop: spacing(5) }]}>
+        {/* QUICK ACTIONS CARD – 2 rows, 8 icons like Figma */}
+        <Card style={[s.quickCard, shadow]}>
           <View style={s.rowBetween}>
-            <Text style={s.sectionTitle}>Last Workout</Text>
-            <Text style={s.badgeSuccess}>{workout.completed ? "Completed" : "—"}</Text>
+            <Text style={s.sectionTitle}>Quick Actions</Text>
           </View>
-
-          <View style={s.tabsRow}>
-            {["duration", "calories", "date"].map((k) => (
-              <TouchableOpacity key={k} onPress={() => setWkTab(k)} style={s.tabBtn}>
-                <Text style={[s.tabTxt, wkTab === k && s.tabActive]}>{cap(k)}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={s.quickGridRow}>
+            <QuickIconTile
+              label="Log Food"
+              icon="nutrition-outline"
+              bg="#FFECEF"
+              iconColor="#FF2D55"
+              onPress={() => router.push("/(models)/add-food")}
+            />
+            <QuickIconTile
+              label="Add Water"
+              icon="water-outline"
+              bg="#E7F3FF"
+              iconColor={colors.info}
+              onPress={() => router.push("/(models)/add-water")}
+            />
+            <QuickIconTile
+              label="Workout"
+              icon="barbell-outline"
+              bg="#F3E8FF"
+              iconColor={colors.purple}
+              onPress={() => router.push("/workout")}
+            />
+            <QuickIconTile
+              label="Weight"
+              icon="barbell-outline"
+              bg="#EAF0FF"
+              iconColor="#6366F1"
+              onPress={() => router.push("/(models)/add-weight")}
+            />
           </View>
-
-          <Card style={{ backgroundColor: colors.surface, padding: 14, borderRadius: 16 }}>
-            {wkTab === "duration" && (<Row icon="time-outline" iconColor={colors.primary} label="Workout Duration" value={`${workout.durationMin} min`} />)}
-            {wkTab === "calories" && (<Row icon="flame-outline" iconColor={colors.orange} label="Calories" value={`${nf.format(workout.calories)} kcal`} />)}
-            {wkTab === "date" && (<Row icon="calendar-outline" iconColor={colors.info} label="Date" value={workout.dateLabel || "—"} />)}
-          </Card>
-
-          <Text style={[s.muted, { marginTop: 8 }]}>{workout.title}</Text>
         </Card>
 
-        {/* PROGRESS INSIGHTS */}
-        <View style={[s.rowBetween, { marginTop: spacing(5), paddingBottom: spacing(1.5) }]}>
-          <Text style={s.sectionTitle}>Progress Insights</Text>
-          <TouchableOpacity><Text style={s.link}>View All ›</Text></TouchableOpacity>
-        </View>
-        <Card style={[s.block, { padding: 14, backgroundColor: colors.cardAccent }]}>
-          <View style={s.inline}>
-            <View style={[s.roundIcon, { backgroundColor: colors.purpleSoft }]}><Ionicons name="trending-up-outline" size={18} color={colors.purple} /></View>
-            <View style={{ marginLeft: 10 }}>
-              <Text style={s.title}>Weekly Summary</Text>
-              <Text style={s.muted}>
-                {weekly.workouts >= 4 ? "You're on fire this week! 🎉" : "Nice work — keep the streak going!"}
-              </Text>
+        {/* WEEKLY PROGRESS GRADIENT CARD */}
+        <LinearGradient
+          colors={["#FFE5F4", "#FFF4DF"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[s.weeklyCard, shadow]}
+        >
+          <View style={s.rowBetween}>
+            <View>
+              <Text style={s.sectionTitle}>Weekly Progress</Text>
+              <Text style={s.weeklySubtitle}>Keep it up!</Text>
+            </View>
+            <View style={s.weekChip}>
+              <Ionicons
+                name="calendar-outline"
+                size={14}
+                color={colors.purple}
+              />
+              <Text style={s.weekChipText}>Week</Text>
             </View>
           </View>
-          <View style={s.insightsRow}>
-            <Insight label="Workouts"   value={String(weekly.workouts)} />
-            <Insight label="Calories"   value={formatK(weekly.calories)} />
-            <Insight label="Active Min" value={String(weekly.active_min)} />
+          <View style={s.weeklyStatsRow}>
+            <View style={s.weeklyStatItem}>
+              <Text style={s.weeklyStatValue}>{weekly.workouts}</Text>
+              <Text style={s.weeklyStatLabel}>Workouts</Text>
+            </View>
+            <View style={s.weeklyStatItem}>
+              <Text style={s.weeklyStatValue}>
+                {formatK(weekly.calories)}
+              </Text>
+              <Text style={s.weeklyStatLabel}>Calories</Text>
+            </View>
+            <View style={s.weeklyStatItem}>
+              <Text style={s.weeklyStatValue}>
+                {weekly.active_min}
+              </Text>
+              <Text style={s.weeklyStatLabel}>Active</Text>
+            </View>
           </View>
-        </Card>
+        </LinearGradient>
 
-        <View style={{ height: spacing(3) }} />
+        <View style={{ height: spacing(4) }} />
       </ScrollView>
 
-      {/* ==== MACRO POP-UP (centered 2×2 grid) ==== */}
-      <Modal visible={showMacros} transparent animationType="fade" onRequestClose={() => setShowMacros(false)}>
-        <Pressable style={s.modalBackdrop} onPress={() => setShowMacros(false)}>
+      {/* ==== MACRO POP-UP (kept, if you still want it) ==== */}
+      <Modal
+        visible={showMacros}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMacros(false)}
+      >
+        <Pressable
+          style={s.modalBackdrop}
+          onPress={() => setShowMacros(false)}
+        >
           <Pressable style={[s.macroSheet, shadow]} onPress={() => {}}>
             <View style={s.macroHeader}>
               <Text style={s.sheetTitle}>Your Macros</Text>
-              <TouchableOpacity onPress={() => setShowMacros(false)}><Text style={s.closeLink}>Close</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowMacros(false)}>
+                <Text style={s.closeLink}>Close</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={s.macroCards}>
-              <MacroCard title="Calories" color={colors.success} icon="flame-outline" value={Math.round(totals.kcal)} goal={Math.round(goals.cal)} unit="" />
-              <MacroCard title="Protein"  color={colors.info}    icon="restaurant-outline" value={Math.round(totals.p)} goal={Math.round(pGoal)} unit="g" />
-              <MacroCard title="Carbs"    color={colors.orange}  icon="leaf-outline" value={Math.round(totals.c)} goal={Math.round(cGoal)} unit="g" />
-              <MacroCard title="Fats"     color={colors.purple}  icon="water-outline" value={Math.round(totals.f)} goal={Math.round(fGoal)} unit="g" />
+              <MacroCard
+                title="Calories"
+                color={colors.success}
+                icon="flame-outline"
+                value={Math.round(totals.kcal)}
+                goal={Math.round(goals.cal)}
+                unit=""
+              />
+              <MacroCard
+                title="Protein"
+                color={colors.info}
+                icon="restaurant-outline"
+                value={Math.round(totals.p)}
+                goal={Math.round(pGoal)}
+                unit="g"
+              />
+              <MacroCard
+                title="Carbs"
+                color={colors.orange}
+                icon="leaf-outline"
+                value={Math.round(totals.c)}
+                goal={Math.round(cGoal)}
+                unit="g"
+              />
+              <MacroCard
+                title="Fats"
+                color={colors.purple}
+                icon="water-outline"
+                value={Math.round(totals.f)}
+                goal={Math.round(fGoal)}
+                unit="g"
+              />
             </View>
           </Pressable>
         </Pressable>
       </Modal>
-      
     </SafeAreaView>
   );
 }
@@ -755,7 +1094,9 @@ export default function Dashboard() {
 function Row({ icon, iconColor, label, value }) {
   return (
     <View style={s.inline}>
-      <View style={s.roundIcon}><Ionicons name={icon} size={18} color={iconColor} /></View>
+      <View style={s.roundIcon}>
+        <Ionicons name={icon} size={18} color={iconColor} />
+      </View>
       <View style={{ marginLeft: 10 }}>
         <Text style={s.muted}>{label}</Text>
         <Text style={s.big}>{value}</Text>
@@ -782,12 +1123,110 @@ function QuickPill({ label, icon, bg, onPress }) {
   );
 }
 
-function Insight({ label, value }) {
-  return (<View style={{ alignItems: "center", flex: 1 }}><Text style={s.insightVal}>{value}</Text><Text style={s.insightLbl}>{label}</Text></View>);
+// NEW quick-action tile matching Figma
+function QuickIconTile({ label, icon, bg, onPress, iconColor }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[s.quickIconTile, { backgroundColor: bg }]}
+      activeOpacity={0.9}
+    >
+      <View style={s.quickIconCircle}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={iconColor || colors.primary}
+        />
+      </View>
+      <Text style={s.quickIconLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
 }
 
-// small circular ring; showTexts lets us reuse it inside the macro cards
-function ActivityRing({ pct = 0.6, color = colors.primary, icon = "help", value, label, size = 96, stroke = 10, showTexts = true }) {
+function Insight({ label, value }) {
+  return (
+    <View style={{ alignItems: "center", flex: 1 }}>
+      <Text style={s.insightVal}>{value}</Text>
+      <Text style={s.insightLbl}>{label}</Text>
+    </View>
+  );
+}
+
+// BIG calories ring like Figma
+function CalorieRing({ pct, total, goal }) {
+  const size = 150;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(1, pct));
+  const dash = c * clamped;
+  const gap = c - dash;
+
+  return (
+    <View style={s.calorieRingWrap}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={colors.ringTrack}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="#FF3B8D"
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={`${dash},${gap}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={s.calorieRingCenter}>
+        <Text style={s.calorieRingValue}>{nf.format(total)}</Text>
+        <Text style={s.calorieRingUnit}>kcal</Text>
+        <Text style={s.calorieRingGoal}>
+          of {nf.format(goal)} kcal
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// Macro row like Figma (dot + text + percentage)
+function MacroRow({ label, color, consumed, goal, pct, unit = "g" }) {
+  return (
+    <View style={s.macroRow}>
+      <View style={s.macroRowLeft}>
+        <View style={[s.macroDot, { backgroundColor: color }]} />
+        <View>
+          <Text style={s.macroLabel}>{label}</Text>
+          <Text style={s.macroSub}>
+            {nf.format(consumed)}
+            {unit} of {nf.format(goal)}
+            {unit}
+          </Text>
+        </View>
+      </View>
+      <Text style={s.macroPct}>{`${pct}%`}</Text>
+    </View>
+  );
+}
+
+// small circular ring
+function ActivityRing({
+  pct = 0.6,
+  color = colors.primary,
+  icon = "help",
+  value,
+  label,
+  size = 80,
+  stroke = 8,
+  showTexts = true,
+}) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(1, pct));
@@ -795,18 +1234,45 @@ function ActivityRing({ pct = 0.6, color = colors.primary, icon = "help", value,
   const gap = c - dash;
   return (
     <View style={s.activityItem}>
-      <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: size,
+          height: size,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <Circle cx={size/2} cy={size/2} r={r} stroke={colors.ringTrack} strokeWidth={stroke} fill="none" />
           <Circle
-            cx={size/2} cy={size/2} r={r} stroke={color} strokeWidth={stroke} fill="none"
-            strokeDasharray={`${dash},${gap}`} strokeLinecap="round"
-            transform={`rotate(-90 ${size/2} ${size/2})`}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={colors.ringTrack}
+            strokeWidth={stroke}
+            fill="none"
+          />
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={color}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={`${dash},${gap}`}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
           />
         </Svg>
-        <View style={s.activityIconWrap}><Ionicons name={icon} size={22} color={color} /></View>
+        <View style={s.activityIconWrap}>
+          <Ionicons name={icon} size={22} color={color} />
+        </View>
       </View>
-      {showTexts && (<><Text style={s.activityValue}>{value}</Text><Text style={s.activityLabel}>{label}</Text></>)}
+      {showTexts && (
+        <>
+          <Text style={s.activityValue}>{value}</Text>
+          <Text style={s.activityLabel}>{label}</Text>
+        </>
+      )}
     </View>
   );
 }
@@ -816,11 +1282,20 @@ function MacroCard({ title, color, icon, value, goal, unit }) {
   const pct = Math.max(0, Math.min(1, goal ? value / goal : 0));
   return (
     <Card style={s.macroCard}>
-      <ActivityRing pct={pct} color={color} icon={icon} size={60} stroke={8} showTexts={false} />
+      <ActivityRing
+        pct={pct}
+        color={color}
+        icon={icon}
+        size={60}
+        stroke={8}
+        showTexts={false}
+      />
       <View style={{ marginTop: 10 }}>
         <Text style={s.title}>{title}</Text>
         <Text style={s.muted}>
-          {nf.format(value)}{unit ? unit : ""} / {nf.format(goal)}{unit ? unit : (title === "Calories" ? "" : "")}
+          {nf.format(value)}
+          {unit ? unit : ""} / {nf.format(goal)}
+          {unit ? unit : title === "Calories" ? "" : ""}
         </Text>
       </View>
     </Card>
@@ -830,33 +1305,87 @@ function MacroCard({ title, color, icon, value, goal, unit }) {
 function DrawerItem({ label, onPress }) {
   return (
     <TouchableOpacity onPress={onPress} style={s.drawerItem}>
-      <Ionicons  size={20} color={colors.text} />
+      <Ionicons size={20} color={colors.text} />
       <Text style={s.drawerItemTxt}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-function cap(x) { return x.charAt(0).toUpperCase() + x.slice(1); }
+function cap(x) {
+  return x.charAt(0).toUpperCase() + x.slice(1);
+}
 
 /* -------------------- styles -------------------- */
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   container: { paddingBottom: spacing(3) },
 
+  /* HEADER */
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing(1),
+    marginBottom: spacing(1.5),
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  headerSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  editRow: {
+    alignItems: "flex-end",
+    marginBottom: spacing(1),
+  },
+
+  // legacy topBar/search kept (not used here)
   topBar: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   searchWrap: {
-    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: colors.card, borderRadius: 999, paddingHorizontal: 12, height: 40,
-    borderWidth: 1, borderColor: colors.border,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.card,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    height: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   searchInput: { flex: 1, color: colors.text, paddingVertical: 0 },
 
   row2: { flexDirection: "row", gap: spacing(1), marginTop: spacing(4) },
   sheetTitle: { flex: 2, padding: 5, borderRadius: 16, fontSize: 15 },
 
-  // tile styles
+  // tile styles (kept for future sections)
   tile: {
     flex: 1,
     borderRadius: 20,
@@ -872,7 +1401,6 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
-
   tileBg: { ...StyleSheet.absoluteFillObject },
   tileInnerBorder: {
     ...StyleSheet.absoluteFillObject,
@@ -881,8 +1409,18 @@ const s = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.03)",
   },
   tileContent: { padding: 14 },
-  tileHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  tileIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  tileHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  tileIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tileOver: {
     color: colors.textMuted,
     fontWeight: "700",
@@ -903,7 +1441,16 @@ const s = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
-  tileBtn: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.card, borderRadius: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border },
+  tileBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   tileBtnTxt: {
     color: colors.text,
     fontWeight: "700",
@@ -916,56 +1463,339 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
 
-  block: { borderRadius: 16 },
+  block: { borderRadius: 10 },
 
-  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   sectionTitle: { color: colors.text, fontWeight: "800" },
   link: { color: colors.primary, fontWeight: "700" },
 
-  tabsRow: { flexDirection: "row", gap: 14, marginTop: 8, marginBottom: 8 },
+  tabsRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 8,
+    marginBottom: 8,
+  },
   tabBtn: { paddingVertical: 6 },
   tabTxt: { color: colors.textMuted, fontWeight: "700" },
   tabActive: { color: colors.primary },
 
   inline: { flexDirection: "row", alignItems: "center" },
-  roundIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
+  roundIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   muted: { color: colors.textMuted },
   big: { color: colors.text, fontSize: 18, fontWeight: "800" },
   title: { color: colors.text, fontSize: 14, fontWeight: "400" },
 
-  badgeSuccess: { color: colors.badgeSuccessText, backgroundColor: colors.badgeSuccessBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, fontWeight: "700" },
+  badgeSuccess: {
+    color: colors.badgeSuccessText,
+    backgroundColor: colors.badgeSuccessBg,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontWeight: "700",
+  },
 
-  quickRow: { flexDirection: "row", gap: spacing(1), marginTop: spacing(1), marginBottom: spacing(1) },
-  qpill: { flex: 1, height: 64, borderRadius: 16, alignItems: "center", justifyContent: "center", gap: 6 },
-  qpillTxt: { color: colors.text, fontWeight: "700", fontSize: 12 },
+  quickRow: {
+    flexDirection: "row",
+    gap: spacing(1),
+    marginTop: spacing(1),
+    marginBottom: spacing(1),
+  },
+  qpill: {
+    flex: 1,
+    height: 64,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  qpillTxt: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 12,
+  },
 
-  /* Daily Activity */
-  activityRow: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing(2), paddingHorizontal: 2 },
+  /* NEW: TOP STATS */
+  topStatsRow: {
+    flexDirection: "row",
+    gap: spacing(1.5),
+    marginTop: spacing(0.5),
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: colors.card,
+  },
+  statHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  statIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statValueRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginTop: 10,
+  },
+  statNumber: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  statSuffix: {
+    marginLeft: 4,
+    color: colors.textMuted,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  statHint: {
+    marginTop: 6,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
 
+  /* CALENDAR CARD */
+  calendarCard: {
+    marginTop: spacing(3),
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: colors.card,
+  },
+  calendarTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  calendarNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  calendarWeekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+    paddingHorizontal: 4,
+  },
+  calendarWeekLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
+  calendarDaysRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingHorizontal: 4,
+    marginBottom: 6,
+  },
+  calendarDay: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarDayActive: {
+    backgroundColor: "#7C3AED",
+  },
+  calendarDayText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
+  calendarDayTextActive: {
+    color: "#FFFFFF",
+  },
+
+  /* NUTRITION CARD */
+  nutritionCard: {
+    marginTop: spacing(3),
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: colors.card,
+  },
+  nutritionTopRow: {
+    alignItems: "center",
+    marginTop: spacing(1.5),
+    marginBottom: spacing(1),
+  },
+  macroList: {
+    marginTop: spacing(1),
+  },
+  macroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+  macroRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  macroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  macroLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  macroSub: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  macroPct: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.text,
+  },
+
+  /* CALORIE RING */
+  calorieRingWrap: {
+    width: 160,
+    height: 160,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calorieRingCenter: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calorieRingValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  calorieRingUnit: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  calorieRingGoal: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+
+  /* Daily Activity / Activity rings */
+  activityCard: {
+    marginTop: spacing(3),
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+  },
+  activityRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing(2),
+    paddingHorizontal: 2,
+  },
   activityItem: { alignItems: "center", width: "32%" },
   activityIconWrap: { position: "absolute" },
-  activityValue: { color: colors.text, fontWeight: "800", marginTop: 8, fontSize: 20 },
-  activityLabel: { color: colors.textMuted, marginTop: 4, fontSize: 14, fontWeight: "600" },
+  activityValue: {
+    color: colors.text,
+    fontWeight: "800",
+    marginTop: 8,
+    fontSize: 18,
+  },
+  activityLabel: {
+    color: colors.textMuted,
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+  },
 
-  /* Recs */
-  recCard: { width: 180, borderRadius: 16, marginRight: 12, backgroundColor: colors.card, overflow: "hidden" },
+  /* Recs (not used in new layout but kept) */
+  recCard: {
+    width: 180,
+    borderRadius: 10,
+    marginRight: 12,
+    backgroundColor: colors.card,
+    overflow: "hidden",
+  },
   recImageWrap: { width: "100%", height: 104, backgroundColor: colors.surface },
   recImage: { width: "100%", height: "100%" },
-  newBadge: { position: "absolute", right: 8, top: 8, backgroundColor: colors.newBadgeBg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-  newBadgeTxt: { color: colors.newBadgeText, fontSize: 10, fontWeight: "700" },
-  recTitle: { color: colors.text, fontWeight: "800", marginTop: 8, marginHorizontal: 10 },
-  recMeta: { flexDirection: "row", alignItems: "center", gap: 6, marginHorizontal: 10, marginTop: 6, marginBottom: 12 },
+  newBadge: {
+    position: "absolute",
+    right: 8,
+    top: 8,
+    backgroundColor: colors.newBadgeBg,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  newBadgeTxt: {
+    color: colors.newBadgeText,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  recTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    marginTop: 8,
+    marginHorizontal: 10,
+  },
+  recMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 10,
+    marginTop: 6,
+    marginBottom: 12,
+  },
   recMetaTxt: { color: colors.textMuted, marginRight: 10 },
 
-  insightsRow: { flexDirection: "row", marginTop: 12, alignItems: "center" },
+  insightsRow: {
+    flexDirection: "row",
+    marginTop: 12,
+    alignItems: "center",
+  },
 
-  progress: { height: 6, backgroundColor: colors.ringTrack, borderRadius: 999, overflow: "hidden", marginTop: 8 },
-  progressBar: { height: "100%", backgroundColor: colors.primary, borderRadius: 999 },
+  progress: {
+    height: 6,
+    backgroundColor: colors.ringTrack,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+  },
 
   /* Macro dialog */
   modalBackdrop: {
     flex: 1,
-    backgroundColor: colors.overlay,
+    backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
     padding: spacing(1),
   },
@@ -984,7 +1814,11 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   closeLink: { color: colors.success, fontWeight: "700" },
-  macroCards: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1)},
+  macroCards: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing(1),
+  },
   macroCard: { width: "48%", padding: 14, borderRadius: 10 },
 
   insightVal: { color: colors.text, fontWeight: "800", fontSize: 16 },
@@ -1022,6 +1856,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 12,
   },
+  drawerItemTxt: { marginLeft: 10, color: colors.text },
+
   topActions: { alignItems: "flex-end" },
 
   editBtnTxt: {
@@ -1032,6 +1868,7 @@ const s = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+
   tileSubSm: {
     color: colors.textMuted,
     marginTop: 2,
@@ -1040,70 +1877,81 @@ const s = StyleSheet.create({
     includeFontPadding: false,
   },
 
-  // added new styles 
-  macrosGrid: {
+  /* Quick actions grid like Figma */
+  quickCard: {
+    marginTop: spacing(3),
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+  },
+  quickGridRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between", // ensures 2 per row
+    justifyContent: "space-between",
     marginTop: 12,
   },
-  smallCard: {
-    flexBasis: "48%",   // % width that works well with wrap
-    maxWidth: "48%",
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-    position: "relative",
-    minHeight: 120,
-    marginBottom: 12,   // vertical gap (gap unsupported in some RN builds)
+  quickIconTile: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  smallCardDark: {
-    backgroundColor: colors.headerDark,
+  quickIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 6,
   },
-  smallCardBlue: {
-    backgroundColor: colors.info,
-  },
-  smallLabel: {
+  quickIconLabel: {
+    fontSize: 11,
     color: colors.textMuted,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  smallValue: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: colors.text,
-    marginTop: 8,
-  },
-  smallUnit: {
-    marginLeft: 6,
-    color: colors.textMuted,
-    fontSize: 15,
-    alignSelf: "flex-end",
-    paddingBottom: 4,
-  },
-  smallIconBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: colors.overlayOnLight, // dark/blue override inline in JSX
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-  },
-  smallGoal: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.textMuted,          // default for light cards
+    fontWeight: "600",
   },
 
-  // color tweaks for dark/blue variants
-  smallGoalOnDark: {
-    color: colors.onHeaderDarkMuted,  // legible over headerDark
+  /* Weekly progress gradient card */
+  weeklyCard: {
+    marginTop: spacing(3),
+    borderRadius: 18,
+    padding: 16,
   },
-  smallGoalOnInfo: {
-    color: colors.onInfo,             // legible over info background
+  weeklySubtitle: {
+    marginTop: 4,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  weekChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.85)",
+  },
+  weekChipText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: colors.purple,
+    fontWeight: "600",
+  },
+  weeklyStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+  },
+  weeklyStatItem: { alignItems: "center", flex: 1 },
+  weeklyStatValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  weeklyStatLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.textMuted,
   },
 });

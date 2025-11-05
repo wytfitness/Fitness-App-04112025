@@ -1,43 +1,105 @@
-// app/(tabs)/workout/index.js
 import { SafeAreaView } from "react-native-safe-area-context";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { colors, spacing } from "../../../lib/theme";
+import { colors, spacing, shadow } from "../../../lib/theme";
 import { api } from "../../../lib/api";
+import { LinearGradient } from "expo-linear-gradient";
 
 const PRESETS = {
   Full: [
-    { id: "back_squat", name: "Back Squat", sets: 3, reps: 10, weight_kg: null, group: "Legs" },
-    { id: "bench_press", name: "Bench Press", sets: 3, reps: 10, weight_kg: null, group: "Chest" },
-    { id: "dumbbell_row", name: "Dumbbell Row", sets: 3, reps: 10, weight_kg: null, group: "Back" },
+    {
+      id: "back_squat",
+      name: "Back Squat",
+      sets: 3,
+      reps: 10,
+      weight_kg: null,
+      group: "Legs",
+    },
+    {
+      id: "bench_press",
+      name: "Bench Press",
+      sets: 3,
+      reps: 10,
+      weight_kg: null,
+      group: "Chest",
+    },
+    {
+      id: "dumbbell_row",
+      name: "Dumbbell Row",
+      sets: 3,
+      reps: 10,
+      weight_kg: null,
+      group: "Back",
+    },
   ],
   Upper: [
-    { id: "bench_press", name: "Bench Press", sets: 3, reps: 10, weight_kg: null, group: "Chest" },
-    { id: "overhead_press", name: "Overhead Press", sets: 3, reps: 8, weight_kg: null, group: "Shoulders" },
-    { id: "lat_pulldown", name: "Lat Pulldown", sets: 3, reps: 10, weight_kg: null, group: "Back" },
+    {
+      id: "bench_press",
+      name: "Bench Press",
+      sets: 3,
+      reps: 10,
+      weight_kg: null,
+      group: "Chest",
+    },
+    {
+      id: "overhead_press",
+      name: "Overhead Press",
+      sets: 3,
+      reps: 8,
+      weight_kg: null,
+      group: "Shoulders",
+    },
+    {
+      id: "lat_pulldown",
+      name: "Lat Pulldown",
+      sets: 3,
+      reps: 10,
+      weight_kg: null,
+      group: "Back",
+    },
   ],
   Lower: [
-    { id: "back_squat", name: "Back Squat", sets: 3, reps: 8, weight_kg: null, group: "Legs" },
-    { id: "romanian_deadlift", name: "Romanian Deadlift", sets: 3, reps: 10, weight_kg: null, group: "Hamstrings" },
-    { id: "calf_raise", name: "Calf Raise", sets: 3, reps: 12, weight_kg: null, group: "Calves" },
+    {
+      id: "back_squat",
+      name: "Back Squat",
+      sets: 3,
+      reps: 8,
+      weight_kg: null,
+      group: "Legs",
+    },
+    {
+      id: "romanian_deadlift",
+      name: "Romanian Deadlift",
+      sets: 3,
+      reps: 10,
+      weight_kg: null,
+      group: "Hamstrings",
+    },
+    {
+      id: "calf_raise",
+      name: "Calf Raise",
+      sets: 3,
+      reps: 12,
+      weight_kg: null,
+      group: "Calves",
+    },
   ],
 };
 
-const FAVORITES = [
-  { id: "bench_press", name: "Bench Press", group: "Chest" },
-  { id: "squat", name: "Squat", group: "Legs" },
-  { id: "deadlift", name: "Deadlift", group: "Back" },
-  { id: "pullups", name: "Pull-ups", group: "Back" },
-  { id: "shoulder_press", name: "Shoulder Press", group: "Shoulders" },
-  { id: "rows", name: "Rows", group: "Back" },
-];
-
 /* ---------- helpers ---------- */
 const minsBetween = (a, b) => {
-  const ta = Date.parse(a), tb = Date.parse(b);
+  const ta = Date.parse(a),
+    tb = Date.parse(b);
   return Number.isFinite(ta) && Number.isFinite(tb) && tb > ta
     ? Math.max(1, Math.round((tb - ta) / 60000))
     : 0;
@@ -53,10 +115,11 @@ const timeAgo = (d) => {
   const dd = Math.round(h / 24);
   return `${dd} day${dd > 1 ? "s" : ""} ago`;
 };
-const slug = (s) => String(s || "")
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, "_")
-  .replace(/^_+|_+$/g, "");
+const slug = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
 /* ---------- component ---------- */
 export default function GymHomeTab() {
@@ -65,12 +128,13 @@ export default function GymHomeTab() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [recents, setRecents] = useState([]); // [{id,title,started_at,ended_at,calories_burned,setsCount}]
+  const [favorites, setFavorites] = useState([]);
 
   const loadRecents = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
-      const j = await api.workouts(10);                         // { workouts: [...] }
+      const j = await api.workouts(10); // { workouts: [...] }
       const arr = j.workouts ?? [];
       setRecents(arr);
     } catch (e) {
@@ -80,7 +144,25 @@ export default function GymHomeTab() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { loadRecents(); }, [loadRecents]));
+  useFocusEffect(
+    useCallback(() => {
+      loadRecents();
+    }, [loadRecents])
+  );
+
+  // favorites from backend
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const j = await api.favoriteWorkouts();
+          setFavorites(j.items ?? j.favorites ?? []);
+        } catch (e) {
+          setFavorites([]);
+        }
+      })();
+    }, [])
+  );
 
   const goBuild = () => router.push("/workout/exercise-picker");
 
@@ -88,7 +170,10 @@ export default function GymHomeTab() {
     const plan = PRESETS[type] || PRESETS.Full;
     router.push({
       pathname: "/workout/review",
-      params: { name: `${type} Quick Start`, plan: encodeURIComponent(JSON.stringify(plan)) },
+      params: {
+        name: `${type} Quick Start`,
+        plan: encodeURIComponent(JSON.stringify(plan)),
+      },
     });
   };
 
@@ -101,7 +186,10 @@ export default function GymHomeTab() {
         // no sets stored → just open quick full with the same title
         return router.push({
           pathname: "/workout/review",
-          params: { name: w.notes || "Workout", plan: encodeURIComponent(JSON.stringify(PRESETS.Full)) },
+          params: {
+            name: w.notes || "Workout",
+            plan: encodeURIComponent(JSON.stringify(PRESETS.Full)),
+          },
         });
       }
       // group by exercise
@@ -125,7 +213,10 @@ export default function GymHomeTab() {
 
       router.push({
         pathname: "/workout/review",
-        params: { name: w.notes || "Workout", plan: encodeURIComponent(JSON.stringify(plan)) },
+        params: {
+          name: w.notes || "Workout",
+          plan: encodeURIComponent(JSON.stringify(plan)),
+        },
       });
     } catch (e) {
       console.warn("repeat workout:", e?.message || e);
@@ -136,21 +227,6 @@ export default function GymHomeTab() {
 
   const startFresh = () => goBuild();
 
-  // …inside component:
-  const [favorites, setFavorites] = useState([]);
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        try {
-          const j = await api.favoriteWorkouts();
-          setFavorites(j.items ?? j.favorites ?? []);
-        } catch (e) {
-          setFavorites([]);
-        }
-      })();
-    }, [])
-  );
-
   // helper to launch a stored routine
   const startFavorite = (fav) => {
     const plan = encodeURIComponent(JSON.stringify(fav.plan || []));
@@ -160,19 +236,39 @@ export default function GymHomeTab() {
 
   return (
     <SafeAreaView style={s.screen} edges={["top"]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing(6) }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.container}
+      >
+        {/* HEADER */}
         <Text style={s.h1}>Gym</Text>
 
-        {/* Top tiles */}
-        <View style={s.row}>
+        {/* TOP TILES */}
+        <View style={s.tilesRow}>
           {/* QUICK START */}
-          <View style={[s.tile, { backgroundColor: colors.successSoft }]}>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => quick("Full")}>
+          <View style={[s.tile, s.quickTile,{ flex: 0.8 }, shadow]}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => quick("Full")}
+            >
               <View style={s.tileHead}>
-                <View style={[s.iconWrap, { backgroundColor: "rgba(16,185,129,0.15)" }]}>
-                  <Ionicons name="flash-outline" size={16} color={colors.success} />
+                <View
+                  style={[
+                    s.iconWrap,
+                    { backgroundColor: "rgba(0,199,165,0.12)" },
+                  ]}
+                >
+                  <Ionicons
+                    name="flash-outline"
+                    size={18}
+                    color={colors.success}
+                  />
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={colors.textMuted}
+                />
               </View>
               <Text style={s.tileTitle}>Quick Start</Text>
               <Text style={s.tileSub}>Full / Upper / Lower</Text>
@@ -180,7 +276,11 @@ export default function GymHomeTab() {
 
             <View style={s.chipsRow}>
               {["Full", "Upper", "Lower"].map((t) => (
-                <TouchableOpacity key={t} onPress={() => quick(t)} style={s.chip}>
+                <TouchableOpacity
+                  key={t}
+                  onPress={() => quick(t)}
+                  style={s.chip}
+                >
                   <Text style={s.chipTxt}>{t}</Text>
                 </TouchableOpacity>
               ))}
@@ -188,36 +288,55 @@ export default function GymHomeTab() {
           </View>
 
           {/* BUILD YOUR OWN */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[s.tile, { backgroundColor: colors.infoSoft }]}
-            onPress={goBuild}
-          >
+           <TouchableOpacity
+              activeOpacity={0.9}
+              style={[s.tile, s.buildTile, { flex: 1/4 }, shadow]}
+              onPress={goBuild}
+            >
             <View style={s.tileHead}>
-              <View style={[s.iconWrap, { backgroundColor: "rgba(37,99,235,0.12)" }]}>
-                <Ionicons name="list-outline" size={16} color={colors.info} />
+              <View
+                style={[
+                  s.iconWrap,
+                  { backgroundColor: "rgba(58,91,255,0.12)" },
+                ]}
+              >
+                <Ionicons
+                  name="list-outline"
+                  size={18}
+                  color={colors.info}
+                />
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
             </View>
             <Text style={s.tileTitle}>Build Your Own</Text>
             <Text style={s.tileSub}>Choose exercises</Text>
           </TouchableOpacity>
         </View>
 
-        {/* RECENT */}
-        <View style={s.card}>
+        {/* RECENT WORKOUTS */}
+        <View style={[s.card, shadow]}>
           <View style={s.cardHead}>
             <Text style={s.cardTitle}>Recent</Text>
-            <TouchableOpacity onPress={() => router.push("/(tabs)/history")}>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/history")}
+              hitSlop={8}
+            >
               <Text style={s.link}>See last workouts →</Text>
             </TouchableOpacity>
           </View>
 
           {err ? <Text style={s.muted}>{err}</Text> : null}
+
           {loading ? (
-            <ActivityIndicator />
+            <ActivityIndicator style={{ marginVertical: 8 }} />
           ) : recents.length === 0 ? (
-            <Text style={s.muted}>Your last sessions will appear here.</Text>
+            <Text style={s.muted}>
+              Your last training sessions will appear here.
+            </Text>
           ) : (
             <View style={{ gap: 10 }}>
               {recents.map((w) => {
@@ -229,12 +348,17 @@ export default function GymHomeTab() {
                 return (
                   <View key={w.id} style={s.recentItem}>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.recentTitle}>{w.notes || "Workout"}</Text>
+                      <Text style={s.recentTitle}>
+                        {w.notes || "Untitled Workout"}
+                      </Text>
                       <Text style={s.recentMeta}>
                         {ago} • {mins} min • {kcal} kcal
                       </Text>
                     </View>
-                    <TouchableOpacity style={s.repeatBtn} onPress={() => repeatWorkout(w)}>
+                    <TouchableOpacity
+                      style={s.repeatBtn}
+                      onPress={() => repeatWorkout(w)}
+                    >
                       <Text style={s.repeatTxt}>Repeat</Text>
                     </TouchableOpacity>
                   </View>
@@ -244,13 +368,16 @@ export default function GymHomeTab() {
           )}
         </View>
 
-       
         {/* FAVORITES */}
-        <View style={s.card}>
-          <Text style={[s.cardTitle, { marginBottom: spacing(1) }]}>Favorites</Text>
+        <View style={[s.card, shadow]}>
+          <Text style={[s.cardTitle, { marginBottom: spacing(1) }]}>
+            Favorites
+          </Text>
 
           {favorites.length === 0 ? (
-            <Text style={s.muted}>Star a workout on the Complete screen to save it here.</Text>
+            <Text style={s.muted}>
+              Star a workout on the Complete screen to save it here.
+            </Text>
           ) : (
             <View style={s.favGrid}>
               {favorites.map((fav) => (
@@ -260,21 +387,46 @@ export default function GymHomeTab() {
                   style={s.favTile}
                   onPress={() => startFavorite(fav)}
                 >
-                  <Ionicons name="star" size={14} color={colors.warning} />
-                  <Text style={s.favTitle}>{fav.name}</Text>
-                  <Text style={s.favSub}>{(fav.plan?.length ?? 0)} exercises</Text>
+                  <Ionicons
+                    name="star"
+                    size={16}
+                    color={colors.warning}
+                    style={{ marginBottom: 6 }}
+                  />
+                  <Text style={s.favTitle} numberOfLines={2}>
+                    {fav.name}
+                  </Text>
+                  <Text style={s.favSub}>
+                    {(fav.plan?.length ?? 0) || 1} exercises
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
 
-        {/* START FRESH */}
-        <TouchableOpacity style={s.freshBox} activeOpacity={0.9} onPress={startFresh}>
-          <View style={s.freshIcon}>
-            <Ionicons name="sync-outline" size={20} color={colors.textMuted} />
-          </View>
-          <Text style={s.freshText}>Start Fresh Workout</Text>
+        {/* START FRESH WORKOUT */}
+        <TouchableOpacity activeOpacity={0.9} onPress={startFresh}>
+          <LinearGradient
+            colors={["#EEF3FF", "#E3F5FF"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[s.freshBox, shadow]}
+          >
+            <View style={s.freshIcon}>
+              <Ionicons
+                name="sync-outline"
+                size={20}
+                color={colors.info}
+              />
+            </View>
+            <View>
+              <Text style={s.freshTitle}>Start Fresh Workout</Text>
+              <Text style={s.freshSub}>
+                Begin a new training session
+              </Text>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -282,93 +434,193 @@ export default function GymHomeTab() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: spacing(2) },
-  h1: { color: colors.text, fontSize: 24, fontWeight: "800", marginBottom: spacing(1.5) },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  container: {
+    paddingHorizontal: spacing(2),
+    paddingTop: spacing(2),
+    paddingBottom: spacing(5),
+  },
 
-  row: { flexDirection: "row", gap: spacing(1) },
+  /* header */
+  h1: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: spacing(1.5),
+  },
 
-  tile: { flex: 1, borderRadius: 16, padding: 14 },
-  tileHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  iconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  tileTitle: { color: colors.text, fontWeight: "800", fontSize: 16, marginTop: 6 },
-  tileSub: { color: colors.textMuted, marginTop: 2 },
+  /* top tiles */
+  tilesRow: {
+    flexDirection: "row",
+    gap: spacing(1.5),
+  },
+  tile: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 14,
+  },
+  quickTile: {
+    backgroundColor: '#EBFEFA', // soft mint
+  },
+  buildTile: {
+    backgroundColor: '#EDF2FF', // soft periwinkle
+  },
+  tileHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    fontSize: 16,
+    marginTop: 8,
+  },
+  tileSub: {
+    color: colors.textMuted,
+    marginTop: 2,
+    fontSize: 13,
+  },
 
-  chipsRow: { flexDirection: "row", gap: 5, marginTop: 10 },
+  chipsRow: {
+    flexDirection: "row",
+    gap: 0,
+    marginTop: 12,
+  },
   chip: {
-    paddingHorizontal: 5,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chipTxt: { color: colors.text, fontWeight: "700", fontSize: 12 },
+  chipTxt: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 12,
+  },
 
+  /* cards */
   card: {
-    marginTop: spacing(2),
+    marginTop: spacing(2.5),
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  cardTitle: { color: colors.text, fontWeight: "800", fontSize: 16 },
-  link: { color: colors.primary, fontWeight: "700" },
-  muted: { color: colors.textMuted },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  cardTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    fontSize: 16,
+  },
+  link: {
+    color: colors.primary,
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  muted: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
 
-  // Recent list
+  /* recent list */
   recentItem: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surface,
   },
-  recentTitle: { color: colors.text, fontWeight: "800", marginBottom: 3 },
-  recentMeta: { color: colors.textMuted, fontSize: 12 },
+  recentTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    marginBottom: 3,
+  },
+  recentMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
   repeatBtn: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: colors.primary,
     borderRadius: 999,
+    marginLeft: 10,
   },
-  repeatTxt: { color: "#fff", fontWeight: "800" },
+  repeatTxt: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
-  // Favorites grid
-  favGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  /* favorites grid */
+  favGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
   favTile: {
     width: "48%",
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 12,
-  },
-  favTitle: { color: colors.text, fontWeight: "800", marginTop: 6 },
-  favSub: { color: colors.textMuted, fontSize: 12 },
-
-  // Start fresh
-  freshBox: {
-    marginTop: spacing(2),
+    backgroundColor: "#FFF7E6",
     borderRadius: 16,
-    padding: 18,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  favTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  favSub: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+
+  /* start fresh */
+  freshBox: {
+    marginTop: spacing(2.5),
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 12,
   },
   freshIcon: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: colors.card,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
   },
-  freshText: { color: colors.textMuted, fontWeight: "700" },
+  freshTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  freshSub: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: 2,
+  },
 });

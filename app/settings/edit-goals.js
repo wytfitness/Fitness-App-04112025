@@ -15,6 +15,7 @@ import Button from "../../components/Button";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { getGoals, saveGoals } from "../../lib/goals";
+import { api } from "../../lib/api";          // ⬅️ NEW
 
 export default function EditGoals() {
   const router = useRouter();
@@ -32,9 +33,9 @@ export default function EditGoals() {
     (async () => {
       try {
         const g = await getGoals();
-        setWeight(String(g.weight ?? ""));
-        setWorkoutDays(String(g.workout_days ?? ""));
-        setCalories(String(g.calories ?? ""));
+        setWeight(g.weight != null ? String(g.weight) : "");
+        setWorkoutDays(g.workout_days != null ? String(g.workout_days) : "");
+        setCalories(g.calories != null ? String(g.calories) : "");
         setCarbs(String(g.carbs_pct ?? 40));
         setProtein(String(g.protein_pct ?? 30));
         setFat(String(g.fat_pct ?? 30));
@@ -50,6 +51,7 @@ export default function EditGoals() {
     const p = parseInt(protein || "0", 10) || 0;
     const f = parseInt(fat || "0", 10) || 0;
 
+    // Macros still kept internally for dashboard
     if (c + p + f !== 100) {
       Alert.alert("Check macros", "Carbs + Protein + Fat must equal 100%.");
       return;
@@ -67,7 +69,19 @@ export default function EditGoals() {
 
     setSaving(true);
     try {
+      // 1) keep existing goals helper (macros + everything)
       await saveGoals(payload);
+
+      // 2) ALSO update via the same Function onboarding uses
+      await api.upsertProfileAndGoals({
+        // these map directly to what we send from onboarding step 1
+        target_weight_kg: payload.weight || undefined,
+        workout_days_goal: payload.workout_days || undefined,
+        calorie_goal: payload.calories || undefined,
+        water_cups_goal: payload.water_cups || undefined,
+        // no profile weight/height here – current weight comes from "Add weight" flow
+      });
+
       router.back();
     } catch (e) {
       Alert.alert("Error", e?.message || "Failed to save");
@@ -160,12 +174,7 @@ export default function EditGoals() {
 
 /* ----- Reusable subcomponents ----- */
 
-function RowInput({
-  value,
-  onChangeText,
-  suffix,
-  keyboardType = "default",
-}) {
+function RowInput({ value, onChangeText, suffix, keyboardType = "default" }) {
   return (
     <View style={sEdit.inputRow}>
       <TextInput
@@ -180,43 +189,24 @@ function RowInput({
   );
 }
 
-function Col({ label, children }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={sEdit.smallLabel}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
 /* ----- Styles ----- */
 
 const sEdit = StyleSheet.create({
-  // Page main heading
   h1: {
     color: colors.text,
     fontWeight: "800",
     fontSize: 20,
     marginBottom: spacing(2),
   },
-
-  // Outer card wrapper (matches "Preferences" card style in Settings)
   cardOuter: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: spacing(2),
-
-    // soft shadow to lift off background a bit
     shadowColor: "rgba(0,0,0,0.03)",
     shadowOpacity: 1,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-
-  // Card title row
   cardTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -225,30 +215,16 @@ const sEdit = StyleSheet.create({
     paddingTop: spacing(1.5),
     paddingBottom: spacing(0.5),
   },
-
-  // Inner content spacing
   cardBody: {
     paddingHorizontal: spacing(1.5),
     paddingBottom: spacing(1.5),
   },
-
-  // Field label above inputs ("Target Weight", "Macros", etc.)
   label: {
     color: colors.textMuted,
     marginBottom: 6,
     fontWeight: "600",
     fontSize: 15,
   },
-
-  // Smaller sublabel for macro columns ("Carbs", "Protein", "Fat")
-  smallLabel: {
-    color: colors.textMuted,
-    marginBottom: 6,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-
-  // Horizontal row input (text box + suffix)
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -259,36 +235,26 @@ const sEdit = StyleSheet.create({
     paddingHorizontal: 12,
     height: 44,
   },
-
   input: {
     flex: 1,
     color: colors.text,
     fontSize: 15,
     fontWeight: "500",
   },
-
   suffix: {
     color: colors.textMuted,
     fontSize: 15,
     marginLeft: 8,
     fontWeight: "500",
   },
-
-  macroRow: {
-    flexDirection: "row",
-    gap: spacing(1),
-  },
-
-  // Save button block
   saveWrap: {
     alignItems: "center",
     marginTop: spacing(1),
   },
-
   saveBtn: {
     minWidth: 150,
     borderRadius: 10,
-    backgroundColor: colors.success, // same family as "Edit Goals"
+    backgroundColor: "#12D3C1",
     paddingVertical: 12,
     shadowColor: "rgba(0,0,0,0.15)",
     shadowOpacity: 1,
@@ -296,7 +262,6 @@ const sEdit = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
-
   saveBtnText: {
     color: colors.onPrimary ?? "#fff",
     fontSize: 15,
